@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  freshops_wms:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: freshops_wms_container
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PLATFORM_NAME=FreshOpsPlatform
+      - TENANT_NAME=Default Operator
+      - TENANT_ID=default
+      - SESSION_SECRET=production-secure-hash-secret
+      - STATE_FILE_PATH=/app/data/state.json
+    volumes:
+      - freshops_data:/app/data
+    restart: always
+
+volumes:
+  freshops_data:

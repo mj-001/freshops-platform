@@ -1,0 +1,6 @@
+{
+  "name": "Harvest & Co WMS",
+  "description": "Warehouse Management System for fresh food D2C operations in Nairobi, enforcing cold chain integrity, FEFO picking, and immutable ledger traceability.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
