@@ -741,7 +741,7 @@ async function handleWorkflowCompletion(approval: any) {
       }
     );
 
-    await saveState();
+    saveState();
   }
   // Other workflow types (NEW_SUPPLIER, PRICE_CHANGE etc.)
   // handled here in future rounds
@@ -1599,7 +1599,7 @@ async function fireWebhooks(trigger: string, payload: any) {
     if (db.webhook_deliveries.length > 1000) {
       db.webhook_deliveries = db.webhook_deliveries.slice(0, 1000);
     }
-    await saveState();
+    saveState();
 
     const startMs = Date.now();
     fetch(webhook.webhook_url, {
@@ -1621,12 +1621,12 @@ async function fireWebhooks(trigger: string, payload: any) {
       delivery.status = r.ok ? 'delivered' : 'failed';
       delivery.http_status = r.status;
       delivery.response_ms = Date.now() - startMs;
-      await saveState();
+      saveState();
     })
     .catch(async () => {
       delivery.status = 'failed';
       delivery.response_ms = Date.now() - startMs;
-      await saveState();
+      saveState();
     });
   });
 }
