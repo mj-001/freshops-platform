@@ -104,8 +104,8 @@ Write-Host "==> Setup complete."
 Write-Host ""
 Write-Host "Next step — submit your first build:"
 Write-Host ""
-Write-Host ("  gcloud builds submit ``")
-Write-Host ("    --config=cloudbuild.yaml ``")
-Write-Host ("    --project=" + $PROJECT_ID + " ``")
-Write-Host ("    .")
+Write-Host '  gcloud builds submit `'
+Write-Host '    --config=cloudbuild.yaml `'
+Write-Host ('    --project=' + $PROJECT_ID + ' `')
+Write-Host '    .'
 Write-Host ""
