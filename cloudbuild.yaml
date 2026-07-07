@@ -1,0 +1,34 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - build
+      - -t
+      - europe-west1-docker.pkg.dev/freshops-platform/freshops/wms:$COMMIT_SHA
+      - .
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - push
+      - europe-west1-docker.pkg.dev/freshops-platform/freshops/wms:$COMMIT_SHA
+
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - freshops-wms
+      - --image=europe-west1-docker.pkg.dev/freshops-platform/freshops/wms:$COMMIT_SHA
+      - --region=europe-west1
+      - --service-account=freshops-cloudrun@freshops-platform.iam.gserviceaccount.com
+      - --set-env-vars=DATABASE_ADAPTER=firestore,DATABASE_URL=freshops-platform,NODE_ENV=production,PLATFORM_NAME=FreshOpsPlatform,TENANT_ID=default,TENANT_NAME=Default Operator
+      - --set-secrets=SESSION_SECRET=SESSION_SECRET:latest
+      - --allow-unauthenticated
+      - --min-instances=0
+      - --max-instances=3
+      - --memory=512Mi
+      - --cpu=1
+      - --port=8080
+      - --platform=managed
+
+images:
+  - europe-west1-docker.pkg.dev/freshops-platform/freshops/wms:$COMMIT_SHA
