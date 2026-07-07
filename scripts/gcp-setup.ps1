@@ -1,5 +1,5 @@
 # One-time GCP resource setup for FreshOpsPlatform Cloud Run deployment.
-# Safe to re-run — all commands are idempotent.
+# Safe to re-run - all commands are idempotent.
 #
 # Prerequisites:
 #   gcloud auth login
@@ -102,7 +102,7 @@ Write-Host "  SESSION_SECRET stored."
 Write-Host ""
 Write-Host "==> Setup complete."
 Write-Host ""
-Write-Host "Next step — submit your first build:"
+Write-Host "Next step - submit your first build:"
 Write-Host ""
 Write-Host '  gcloud builds submit `'
 Write-Host '    --config=cloudbuild.yaml `'
