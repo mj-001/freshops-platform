@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { User, SKU, Supplier, Batch, ProductRecall, RecallAction } from '../types';
+import { useCurrency } from '../hooks/useCurrency';
 import { 
   Plus, 
   Lock, 
@@ -25,6 +26,7 @@ interface RecallsProps {
 }
 
 export default function Recalls({ currentUser, skus, triggerToast }: RecallsProps) {
+  const { currencyCode } = useCurrency();
   const [recalls, setRecalls] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [offline, setOffline] = useState(false);
@@ -212,7 +214,7 @@ export default function Recalls({ currentUser, skus, triggerToast }: RecallsProp
       {/* Offline indicators */}
       {offline && (
         <div className="bg-rose-50 border border-rose-200 text-rose-955 text-xs p-3.5 rounded-xl flex items-center justify-between font-bold">
-          <span>Connection offline — viewing local snapshot.</span>
+          <span>Connection offline â€” viewing local snapshot.</span>
           <button onClick={fetchRecalls} className="bg-white border border-rose-300 text-rose-800 px-3 py-1.5 rounded-lg min-h-[44px]">Retry</button>
         </div>
       )}
@@ -371,7 +373,7 @@ export default function Recalls({ currentUser, skus, triggerToast }: RecallsProp
                           </span>
                         </td>
                         <td className="p-3 text-center font-mono text-slate-500 text-[10px]">
-                          KES {(recall.exposure_snapshot?.estimated_value_kes / 100).toLocaleString()}
+                          KES {(recall.exposure_snapshot?.estimated_value_cents / 100).toLocaleString()}
                         </td>
                       </tr>
                     ))}
@@ -428,8 +430,8 @@ export default function Recalls({ currentUser, skus, triggerToast }: RecallsProp
                     <span className="font-bold font-mono">{viewingRecall.exposure_snapshot?.units_delivered} Units</span>
                   </div>
                   <div className="flex justify-between items-center text-xs border-t border-slate-800 pt-2 text-rose-300 font-bold">
-                    <span>KES at Risk / Isolated</span>
-                    <span className="font-mono">KES {(viewingRecall.exposure_snapshot?.estimated_value_kes / 100).toLocaleString()}</span>
+                    <span>{currencyCode} at Risk / Isolated</span>
+                    <span className="font-mono">KES {(viewingRecall.exposure_snapshot?.estimated_value_cents / 100).toLocaleString()}</span>
                   </div>
                 </div>
               </div>
@@ -465,7 +467,7 @@ export default function Recalls({ currentUser, skus, triggerToast }: RecallsProp
                             </div>
                             <p className="text-[10px] text-slate-500 leading-relaxed font-semibold">{act.description}</p>
                             {!isDone && (
-                              <p className="text-[9px] text-rose-600 font-bold italic mt-0.5">⚠️ Retry manually needed.</p>
+                              <p className="text-[9px] text-rose-600 font-bold italic mt-0.5">âš ï¸ Retry manually needed.</p>
                             )}
                           </div>
                         );
@@ -536,7 +538,7 @@ export default function Recalls({ currentUser, skus, triggerToast }: RecallsProp
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <div>
                 <h3 className="text-sm font-black text-slate-900">Initiate Safety Recall</h3>
-                <p className="text-[10px] text-slate-400">Step {formStep} of 2 — {formStep === 1 ? 'Configure Scope' : 'Confirm Exposure'}</p>
+                <p className="text-[10px] text-slate-400">Step {formStep} of 2 â€” {formStep === 1 ? 'Configure Scope' : 'Confirm Exposure'}</p>
               </div>
               <button 
                 onClick={() => setIsInitiating(false)}
@@ -707,7 +709,7 @@ export default function Recalls({ currentUser, skus, triggerToast }: RecallsProp
                   </div>
                   <div className="bg-slate-900 border p-3 rounded-xl text-center text-white col-span-2">
                     <span className="text-[9px] text-slate-400 block font-bold transition uppercase">Isolated Value</span>
-                    <span className="text-sm font-black text-teal-350 font-mono mt-0.5 block">KES {(draftRecall?.exposure_snapshot?.estimated_value_kes / 100).toLocaleString()}</span>
+                    <span className="text-sm font-black text-teal-350 font-mono mt-0.5 block">KES {(draftRecall?.exposure_snapshot?.estimated_value_cents / 100).toLocaleString()}</span>
                   </div>
                 </div>
 
@@ -740,3 +742,4 @@ export default function Recalls({ currentUser, skus, triggerToast }: RecallsProp
     </div>
   );
 }
+

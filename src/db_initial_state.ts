@@ -1,5 +1,5 @@
-/**
- * FreshOpsPlatform — Demo Seed Data
+﻿/**
+ * FreshOpsPlatform â€” Demo Seed Data
  *
  * This file contains illustrative demo data for a fictional fresh
  * food operator in Nairobi ("Regen Warehouse" / "Regal Plaza").
@@ -14,18 +14,18 @@
  *
  * The following are intentionally specific to the demo scenario
  * and are NOT constraints on how you use the platform:
- *   - Warehouse names (Regen, Regal) — create your own
- *   - Supplier names (Kenchic etc.) — create your own in Suppliers
- *   - Customer names (Carrefour, QuickMart etc.) — create your own
- *   - Product names and codes — create your own via Catalogue
- *   - Asset types — none seeded; create your own in Settings
- *   - Counting sections — none seeded; create your own in Settings
+ *   - Warehouse names (Regen, Regal) â€” create your own
+ *   - Supplier names (Kenchic etc.) â€” create your own in Suppliers
+ *   - Customer names (Carrefour, QuickMart etc.) â€” create your own
+ *   - Product names and codes â€” create your own via Catalogue
+ *   - Asset types â€” none seeded; create your own in Settings
+ *   - Counting sections â€” none seeded; create your own in Settings
  *   - All monetary values are in KES
  */
 
 import { User, Warehouse, Zone, Location, Supplier, Category, SKU, Customer, PurchaseOrder, CustomerOrder, PurchaseOrderLine, CustomerOrderLine, StockLedgerEntry, Batch, WorkflowTemplate, Asset } from './types';
 
-// Seed accounts use temporary password 'changeme123' — all seed
+// Seed accounts use temporary password 'changeme123' â€” all seed
 // accounts have must_reset_password: true and will be forced to
 // change this on first login.
 export const INITIAL_USERS: User[] = [
@@ -216,8 +216,8 @@ export const INITIAL_SKUS: SKU[] = [
     shelf_life_days: 5,
     reorder_level: 50,
     reorder_qty: 100,
-    cost_price_kes: 7000, // 70.00 KES
-    selling_price_kes: 9500, // 95.00 KES
+    cost_price_cents: 7000, // 70.00 KES
+    selling_price_cents: 9500, // 95.00 KES
     is_active: true,
     created_at: '2026-06-01T00:00:00Z',
     updated_at: '2026-06-01T00:00:00Z',
@@ -250,8 +250,8 @@ export const INITIAL_SKUS: SKU[] = [
     shelf_life_days: 4,
     reorder_level: 25,
     reorder_qty: 60,
-    cost_price_kes: 45000, // 450.00 KES
-    selling_price_kes: 58000, // 580.00 KES
+    cost_price_cents: 45000, // 450.00 KES
+    selling_price_cents: 58000, // 580.00 KES
     is_active: true,
     created_at: '2026-06-01T00:00:00Z',
     updated_at: '2026-06-01T00:00:00Z',
@@ -284,8 +284,8 @@ export const INITIAL_SKUS: SKU[] = [
     shelf_life_days: 7,
     reorder_level: 30,
     reorder_qty: 50,
-    cost_price_kes: 12000, // 120.00 KES
-    selling_price_kes: 18000, // 180.00 KES
+    cost_price_cents: 12000, // 120.00 KES
+    selling_price_cents: 18000, // 180.00 KES
     is_active: true,
     created_at: '2026-06-01T00:00:00Z',
     updated_at: '2026-06-01T00:00:00Z',
@@ -318,8 +318,8 @@ export const INITIAL_SKUS: SKU[] = [
     shelf_life_days: 180,
     reorder_level: 40,
     reorder_qty: 80,
-    cost_price_kes: 32000, // 320.00 KES
-    selling_price_kes: 39500, // 395.00 KES
+    cost_price_cents: 32000, // 320.00 KES
+    selling_price_cents: 39500, // 395.00 KES
     is_active: true,
     created_at: '2026-06-01T00:00:00Z',
     updated_at: '2026-06-01T00:00:00Z',
@@ -352,8 +352,8 @@ export const INITIAL_SKUS: SKU[] = [
     shelf_life_days: 90,
     reorder_level: 15,
     reorder_qty: 40,
-    cost_price_kes: 52000, // 520.00 KES
-    selling_price_kes: 68000, // 680.00 KES
+    cost_price_cents: 52000, // 520.00 KES
+    selling_price_cents: 68000, // 680.00 KES
     is_active: true,
     created_at: '2026-06-01T00:00:00Z',
     updated_at: '2026-06-01T00:00:00Z',
@@ -386,8 +386,8 @@ export const INITIAL_SKUS: SKU[] = [
     shelf_life_days: 0,
     reorder_level: 0,
     reorder_qty: 0,
-    cost_price_kes: 0, // computed from components at pick time
-    selling_price_kes: 145000, // KES 1,450
+    cost_price_cents: 0, // computed from components at pick time
+    selling_price_cents: 145000, // KES 1,450
     is_active: true,
     created_at: '2026-06-15T00:00:00Z',
     updated_at: '2026-06-15T00:00:00Z',
@@ -410,10 +410,10 @@ export const INITIAL_SKUS: SKU[] = [
 ];
 
 export const INITIAL_CUSTOMERS: Customer[] = [
-  { id: 'C-01', name: 'Carrefour Sarit Centre', phone: '+254722000111', email: 'sarit@carrefour.ke', delivery_address: 'Sarit Centre, Westlands, Nairobi', zone: 'Westlands', customer_type: 'b2c', company_name: null, payment_terms: 'cash', credit_limit_kes: null, outstanding_balance_kes: 0, created_at: '2026-06-01T10:00:00Z' },
-  { id: 'C-02', name: 'QuickMart Lavington', phone: '+254722000222', email: 'lavington@quickmart.ke', delivery_address: 'Lavington Mall, Nairobi', zone: 'Lavington', customer_type: 'b2c', company_name: null, payment_terms: 'cash', credit_limit_kes: null, outstanding_balance_kes: 0, created_at: '2026-06-01T10:00:00Z' },
-  { id: 'C-03', name: 'Naivas Ngong Road', phone: '+254722000333', email: 'ngong@naivas.co.ke', delivery_address: 'Prestige Plaza, Ngong Road, Nairobi', zone: 'Ngong Road', customer_type: 'b2c', company_name: null, payment_terms: 'cash', credit_limit_kes: null, outstanding_balance_kes: 0, created_at: '2026-06-01T10:00:00Z' },
-  { id: 'CUST-B2B-001', name: 'Café Savanna Ltd', phone: '+254 722 000 001', email: 'orders@verde.co.ke', delivery_address: 'Westlands, Nairobi', zone: 'Westlands', customer_type: 'b2b', company_name: 'Savanna Ltd', payment_terms: 'net_14', credit_limit_kes: 150000, outstanding_balance_kes: 32000, created_at: '2026-06-16T12:00:00Z' }
+  { id: 'C-01', name: 'Carrefour Sarit Centre', phone: '+254722000111', email: 'sarit@carrefour.ke', delivery_address: 'Sarit Centre, Westlands, Nairobi', zone: 'Westlands', customer_type: 'b2c', company_name: null, payment_terms: 'cash', credit_limit_cents: null, outstanding_balance_cents: 0, created_at: '2026-06-01T10:00:00Z' },
+  { id: 'C-02', name: 'QuickMart Lavington', phone: '+254722000222', email: 'lavington@quickmart.ke', delivery_address: 'Lavington Mall, Nairobi', zone: 'Lavington', customer_type: 'b2c', company_name: null, payment_terms: 'cash', credit_limit_cents: null, outstanding_balance_cents: 0, created_at: '2026-06-01T10:00:00Z' },
+  { id: 'C-03', name: 'Naivas Ngong Road', phone: '+254722000333', email: 'ngong@naivas.co.ke', delivery_address: 'Prestige Plaza, Ngong Road, Nairobi', zone: 'Ngong Road', customer_type: 'b2c', company_name: null, payment_terms: 'cash', credit_limit_cents: null, outstanding_balance_cents: 0, created_at: '2026-06-01T10:00:00Z' },
+  { id: 'CUST-B2B-001', name: 'CafÃ© Savanna Ltd', phone: '+254 722 000 001', email: 'orders@verde.co.ke', delivery_address: 'Westlands, Nairobi', zone: 'Westlands', customer_type: 'b2b', company_name: 'Savanna Ltd', payment_terms: 'net_14', credit_limit_cents: 150000, outstanding_balance_cents: 32000, created_at: '2026-06-16T12:00:00Z' }
 ];
 
 export const INITIAL_POS: PurchaseOrder[] = [
@@ -422,22 +422,22 @@ export const INITIAL_POS: PurchaseOrder[] = [
 ];
 
 export const INITIAL_PO_LINES: PurchaseOrderLine[] = [
-  { id: 'POL-1001-A', po_id: 'PO-1001', sku_id: 'SKU-MILK', qty_ordered: 100, qty_received: 0, unit_cost_kes: 7000 },
-  { id: 'POL-1001-B', po_id: 'PO-1001', sku_id: 'SKU-CHICK', qty_ordered: 50, qty_received: 0, unit_cost_kes: 45000 },
-  { id: 'POL-1002-A', po_id: 'PO-1002', sku_id: 'SKU-AVO', qty_ordered: 40, qty_received: 0, unit_cost_kes: 12000 }
+  { id: 'POL-1001-A', po_id: 'PO-1001', sku_id: 'SKU-MILK', qty_ordered: 100, qty_received: 0, unit_cost_cents: 7000 },
+  { id: 'POL-1001-B', po_id: 'PO-1001', sku_id: 'SKU-CHICK', qty_ordered: 50, qty_received: 0, unit_cost_cents: 45000 },
+  { id: 'POL-1002-A', po_id: 'PO-1002', sku_id: 'SKU-AVO', qty_ordered: 40, qty_received: 0, unit_cost_cents: 12000 }
 ];
 
 export const INITIAL_CUSTOMER_ORDERS: CustomerOrder[] = [
-  { id: 'ORD-2001', external_order_id: 'WC-8831', customer_id: 'C-01', fulfilment_warehouse_id: 'RGN', status: 'received', delivery_date: '2026-06-15T10:00:00Z', delivery_address: 'Sarit Centre, Westlands, Nairobi', total_value_kes: 1720000, notes: 'Deliver to back loading dock', delivery_zone: null, dispatch_sequence: null, created_at: '2026-06-14T08:00:00Z', updated_at: '2026-06-14T08:00:00Z', picked_by: null, packed_by: null, packed_at: null, cold_chain_confirmed: false, packed_tote_count: null },
-  { id: 'ORD-2002', external_order_id: 'WC-8832', customer_id: 'C-02', fulfilment_warehouse_id: 'RGL', status: 'received', delivery_date: '2026-06-15T12:00:00Z', delivery_address: 'Lavington Mall, Nairobi', total_value_kes: 790000, notes: 'Leave at reception if closed', delivery_zone: null, dispatch_sequence: null, created_at: '2026-06-14T08:45:00Z', updated_at: '2026-06-14T08:45:00Z', picked_by: null, packed_by: null, packed_at: null, cold_chain_confirmed: false, packed_tote_count: null }
+  { id: 'ORD-2001', external_order_id: 'WC-8831', customer_id: 'C-01', fulfilment_warehouse_id: 'RGN', status: 'received', delivery_date: '2026-06-15T10:00:00Z', delivery_address: 'Sarit Centre, Westlands, Nairobi', total_value_cents: 1720000, notes: 'Deliver to back loading dock', delivery_zone: null, dispatch_sequence: null, created_at: '2026-06-14T08:00:00Z', updated_at: '2026-06-14T08:00:00Z', picked_by: null, packed_by: null, packed_at: null, cold_chain_confirmed: false, packed_tote_count: null },
+  { id: 'ORD-2002', external_order_id: 'WC-8832', customer_id: 'C-02', fulfilment_warehouse_id: 'RGL', status: 'received', delivery_date: '2026-06-15T12:00:00Z', delivery_address: 'Lavington Mall, Nairobi', total_value_cents: 790000, notes: 'Leave at reception if closed', delivery_zone: null, dispatch_sequence: null, created_at: '2026-06-14T08:45:00Z', updated_at: '2026-06-14T08:45:00Z', picked_by: null, packed_by: null, packed_at: null, cold_chain_confirmed: false, packed_tote_count: null }
 ];
 
 export const INITIAL_CUSTOMER_ORDER_LINES: CustomerOrderLine[] = [
-  { id: 'OL-2001-A', order_id: 'ORD-2001', sku_id: 'SKU-MILK', qty_ordered: 20, qty_fulfilled: 0, unit_price_kes: 9500 },
-  { id: 'OL-2001-B', order_id: 'ORD-2001', sku_id: 'SKU-CHICK', qty_ordered: 10, qty_fulfilled: 0, unit_price_kes: 58000 },
-  { id: 'OL-2001-C', order_id: 'ORD-2001', sku_id: 'SKU-AVO', qty_ordered: 15, qty_fulfilled: 0, unit_price_kes: 18000 },
-  { id: 'OL-2002-A', order_id: 'ORD-2002', sku_id: 'SKU-MILK', qty_ordered: 10, qty_fulfilled: 0, unit_price_kes: 9500 },
-  { id: 'OL-2002-B', order_id: 'ORD-2002', sku_id: 'SKU-RICE', qty_ordered: 10, qty_fulfilled: 0, unit_price_kes: 39500 }
+  { id: 'OL-2001-A', order_id: 'ORD-2001', sku_id: 'SKU-MILK', qty_ordered: 20, qty_fulfilled: 0, unit_price_cents: 9500 },
+  { id: 'OL-2001-B', order_id: 'ORD-2001', sku_id: 'SKU-CHICK', qty_ordered: 10, qty_fulfilled: 0, unit_price_cents: 58000 },
+  { id: 'OL-2001-C', order_id: 'ORD-2001', sku_id: 'SKU-AVO', qty_ordered: 15, qty_fulfilled: 0, unit_price_cents: 18000 },
+  { id: 'OL-2002-A', order_id: 'ORD-2002', sku_id: 'SKU-MILK', qty_ordered: 10, qty_fulfilled: 0, unit_price_cents: 9500 },
+  { id: 'OL-2002-B', order_id: 'ORD-2002', sku_id: 'SKU-RICE', qty_ordered: 10, qty_fulfilled: 0, unit_price_cents: 39500 }
 ];
 
 export const INITIAL_BATCHES: Batch[] = [
@@ -560,4 +560,5 @@ export const INITIAL_WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
 ];
 
 export const INITIAL_ASSETS: Asset[] = [];
+
 

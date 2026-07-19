@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { User, WorkflowApproval } from '../types';
+import { useCurrency } from '../hooks/useCurrency';
 import { 
   CheckCircle, 
   XCircle, 
@@ -25,6 +26,7 @@ export default function PendingApprovals({
   currentUser, 
   triggerToast 
 }: PendingApprovalsProps) {
+  const { format: formatMoney } = useCurrency();
   const [approvals, setApprovals] = useState<WorkflowApproval[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<'pending' | 'all'>('pending');
@@ -139,8 +141,8 @@ export default function PendingApprovals({
   };
 
   const formatCurrency = (val: number | null | undefined): string => {
-    if (val === null || val === undefined) return 'KES 0.00';
-    return `KES ${Number(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    if (val === null || val === undefined) return formatMoney(0);
+    return formatMoney(Number(val));
   };
 
   return (
@@ -241,8 +243,8 @@ export default function PendingApprovals({
             let poId = '';
 
             if (approval.type === 'PRICE_VARIANCE' && approval.entity_snapshot) {
-              actualUnitCost = approval.entity_snapshot.actual_unit_cost_kes || 0;
-              poUnitCost = approval.entity_snapshot.po_unit_cost_kes || 0;
+              actualUnitCost = approval.entity_snapshot.actual_unit_cost_cents || 0;
+              poUnitCost = approval.entity_snapshot.po_unit_cost_cents || 0;
               varianceAmt = actualUnitCost - poUnitCost;
               skuId = approval.entity_snapshot.sku_id || '';
               poId = approval.entity_snapshot.po_id || '';
@@ -288,7 +290,7 @@ export default function PendingApprovals({
                         <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
                           {approval.type.replace('_', ' ')}
                         </span>
-                        <span className="text-xs text-gray-400">•</span>
+                        <span className="text-xs text-gray-400">â€¢</span>
                         <span className="text-xs text-gray-500 font-mono tracking-tight">{approval.id}</span>
                       </div>
 
@@ -300,7 +302,7 @@ export default function PendingApprovals({
 
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500 mt-1">
                         <span>Raised by: <span className="font-semibold text-gray-700">{(approval as any).raised_by_name || approval.raised_by}</span></span>
-                        <span>•</span>
+                        <span>â€¢</span>
                         <span>Date: <span className="font-semibold text-gray-700">{new Date(approval.raised_at).toLocaleString()}</span></span>
                       </div>
                     </div>
@@ -571,3 +573,4 @@ export default function PendingApprovals({
     </div>
   );
 }
+

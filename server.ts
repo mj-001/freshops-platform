@@ -1,4 +1,4 @@
-import 'dotenv/config' 
+﻿import 'dotenv/config' 
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
@@ -125,8 +125,8 @@ const CONFIG = {
     parseInt(process.env.EXPIRY_ALERT_DAYS_DEFAULT || '3'),
   DELIVERY_LATE_HOURS:
     parseFloat(process.env.DELIVERY_LATE_HOURS || '3'),
-  WRITE_OFF_HIGH_VALUE_KES:
-    parseInt(process.env.WRITE_OFF_HIGH_VALUE_KES || '1000000'),
+  WRITE_OFF_HIGH_VALUE_cents:
+    parseInt(process.env.WRITE_OFF_HIGH_VALUE_cents || '1000000'),
 
   // API
   API_KEY_PREFIX:
@@ -401,6 +401,46 @@ function runDefensiveMigrations() {
         }
       });
 
+      // Migrate _kes field names to _cents on existing data
+      const migrateCentsField = (obj: any, oldKey: string, newKey: string) => {
+        if (obj[oldKey] !== undefined && obj[newKey] === undefined) obj[newKey] = obj[oldKey];
+      };
+      (db.skus || []).forEach((s: any) => {
+        migrateCentsField(s, 'cost_price_kes', 'cost_price_cents');
+        migrateCentsField(s, 'selling_price_kes', 'selling_price_cents');
+      });
+      (db.purchase_order_lines || []).forEach((l: any) => migrateCentsField(l, 'unit_cost_kes', 'unit_cost_cents'));
+      (db.goods_receipt_lines || []).forEach((l: any) => {
+        migrateCentsField(l, 'actual_unit_cost_kes', 'actual_unit_cost_cents');
+        migrateCentsField(l, 'price_variance_kes', 'price_variance_cents');
+      });
+      (db.price_history || []).forEach((p: any) => {
+        migrateCentsField(p, 'cost_price_kes', 'cost_price_cents');
+        migrateCentsField(p, 'selling_price_kes', 'selling_price_cents');
+      });
+      (db.customers || []).forEach((c: any) => {
+        migrateCentsField(c, 'credit_limit_kes', 'credit_limit_cents');
+        migrateCentsField(c, 'outstanding_balance_kes', 'outstanding_balance_cents');
+      });
+      (db.customer_orders || []).forEach((o: any) => migrateCentsField(o, 'total_value_kes', 'total_value_cents'));
+      (db.customer_order_lines || []).forEach((l: any) => migrateCentsField(l, 'unit_price_kes', 'unit_price_cents'));
+      (db.write_off_lines || []).forEach((l: any) => {
+        migrateCentsField(l, 'value_kes', 'value_cents');
+        migrateCentsField(l, 'total_value_kes', 'total_value_cents');
+      });
+      (db.write_offs || []).forEach((w: any) => migrateCentsField(w, 'total_value_kes', 'total_value_cents'));
+      (db.vendor_cards || []).forEach((v: any) => migrateCentsField(v, 'price_kes', 'price_cents'));
+      (db.markdown_approvals || []).forEach((m: any) => {
+        migrateCentsField(m, 'markdown_price_kes', 'markdown_price_cents');
+        migrateCentsField(m, 'proposed_markdown_price_kes', 'proposed_markdown_price_cents');
+        migrateCentsField(m, 'original_price_kes', 'original_price_cents');
+        migrateCentsField(m, 'total_value_kes', 'total_value_cents');
+      });
+      (db.customer_returns || []).forEach((r: any) => {
+        migrateCentsField(r, 'credit_value_kes', 'credit_value_cents');
+        migrateCentsField(r, 'total_credit_value_kes', 'total_credit_value_cents');
+      });
+
       // Backfill reports_to_user_id, granted_permissions, revoked_permissions
       (db.users || []).forEach((u: any) => {
         if (u.reports_to_user_id === undefined) u.reports_to_user_id = null;
@@ -408,10 +448,10 @@ function runDefensiveMigrations() {
         if (!u.revoked_permissions) u.revoked_permissions = [];
       });
 
-      // Backfill actual_unit_cost_kes etc. on existing GRN lines
+      // Backfill actual_unit_cost_cents etc. on existing GRN lines
       (db.goods_receipt_lines || []).forEach((l: any) => {
-        if (l.actual_unit_cost_kes === undefined) l.actual_unit_cost_kes = null;
-        if (l.price_variance_kes === undefined) l.price_variance_kes = null;
+        if (l.actual_unit_cost_cents === undefined) l.actual_unit_cost_cents = null;
+        if (l.price_variance_cents === undefined) l.price_variance_cents = null;
         if (l.variance_workflow_id === undefined) l.variance_workflow_id = null;
       });
 
@@ -419,13 +459,13 @@ function runDefensiveMigrations() {
       if (!db.price_history) db.price_history = [];
       (db.skus || []).forEach((sku: any) => {
         const existing = (db.price_history || []).find((p: any) => p.sku_id === sku.id);
-        if (!existing && sku.cost_price_kes) {
+        if (!existing && sku.cost_price_cents) {
           db.price_history.push({
             id: `PH-INIT-${sku.id}`,
             sku_id: sku.id,
             effective_from: sku.created_at || new Date().toISOString(),
-            cost_price_kes: sku.cost_price_kes,
-            selling_price_kes: sku.selling_price_kes || 0,
+            cost_price_cents: sku.cost_price_cents,
+            selling_price_cents: sku.selling_price_cents || 0,
             reason: 'initial',
             notes: 'Initial price at product creation',
             changed_by: 'SYSTEM',
@@ -526,7 +566,7 @@ async function loadState() {
   const adapterType = process.env.DATABASE_ADAPTER || 'json';
 
   if (adapterType === 'json') {
-    // Original JSON file behaviour — unchanged
+    // Original JSON file behaviour â€” unchanged
     try {
       if (fs.existsSync(STATE_FILE)) {
         const data = fs.readFileSync(STATE_FILE, 'utf8');
@@ -540,7 +580,7 @@ async function loadState() {
       await resetState();
     }
   } else {
-    // Adapter mode — load all collections from the adapter
+    // Adapter mode â€” load all collections from the adapter
     try {
       const state = await dbAdapter.loadAll();
       if (state && Object.keys(state).length > 0) {
@@ -555,9 +595,9 @@ async function loadState() {
         runDefensiveMigrations();
         console.log('[loadState] State loaded from adapter successfully.');
       } else {
-        // Empty database — start fresh with seed data
+        // Empty database â€” start fresh with seed data
         await resetState();
-        console.log('[loadState] Empty database — starting with seed data.');
+        console.log('[loadState] Empty database â€” starting with seed data.');
         // Save seed data to the adapter so it persists
         await saveState();
       }
@@ -568,18 +608,26 @@ async function loadState() {
   }
 }
 
+function getCurrencyCode(): string {
+  return db.setup_config?.currency || 'KES';
+}
+
+function formatMoney(amountCents: number): string {
+  return `${getCurrencyCode()} ${(amountCents / 100).toFixed(2)}`;
+}
+
 async function saveState() {
   const adapterType = process.env.DATABASE_ADAPTER || 'json';
 
   if (adapterType === 'json') {
-    // Original JSON file behaviour — unchanged
+    // Original JSON file behaviour â€” unchanged
     try {
       fs.writeFileSync(STATE_FILE, JSON.stringify(db, null, 2), 'utf8');
     } catch (error) {
       console.error('Failed to save WMS state to disk:', error);
     }
   } else {
-    // Adapter mode — save entire state through the adapter
+    // Adapter mode â€” save entire state through the adapter
     try {
       // Build a plain object of all collections from db
       const state: Record<string, any[]> = {};
@@ -691,27 +739,27 @@ function generateTempPassword(): string {
 async function handleWorkflowCompletion(approval: any) {
   if (approval.type === 'PRICE_VARIANCE') {
     const snapshot = approval.entity_snapshot;
-    // snapshot contains: sku_id, po_id, grn_date, actual_unit_cost_kes,
-    // po_unit_cost_kes, selling_price_kes_current
+    // snapshot contains: sku_id, po_id, grn_date, actual_unit_cost_cents,
+    // po_unit_cost_cents, selling_price_cents_current
 
     const sku = db.skus.find((s: any) => s.id === snapshot.sku_id);
     if (!sku) return;
 
     // Create PriceHistory record effective from the GRN date
-    // of the specific PO — NOT today. This makes the correction
+    // of the specific PO â€” NOT today. This makes the correction
     // retroactive to that PO only.
     if (!db.price_history) db.price_history = [];
     const priceRecord = {
       id: `PH-VAR-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
       sku_id: snapshot.sku_id,
       effective_from: snapshot.grn_date,  // the GRN date, not today
-      cost_price_kes: snapshot.actual_unit_cost_kes,
-      selling_price_kes: sku.selling_price_kes, // selling price unchanged
+      cost_price_cents: snapshot.actual_unit_cost_cents,
+      selling_price_cents: sku.selling_price_cents, // selling price unchanged
                                                   // unless explicitly set
       reason: 'variance_approved' as const,
       notes: `Price variance approved on PO ${snapshot.po_id}. ` +
-             `PO price: ${snapshot.po_unit_cost_kes}, ` +
-             `Actual: ${snapshot.actual_unit_cost_kes}`,
+             `PO price: ${snapshot.po_unit_cost_cents}, ` +
+             `Actual: ${snapshot.actual_unit_cost_cents}`,
       changed_by: approval.stages[approval.stages.length - 1]?.actioned_by || 'SYSTEM',
       source_po_id: snapshot.po_id,
       created_at: new Date().toISOString()
@@ -719,7 +767,7 @@ async function handleWorkflowCompletion(approval: any) {
     db.price_history.push(priceRecord);
 
     // Keep SKU in sync (so current prices reflect reality)
-    sku.cost_price_kes = snapshot.actual_unit_cost_kes;
+    sku.cost_price_cents = snapshot.actual_unit_cost_cents;
 
     // Fire webhook for ERP/accounting integration
     fireWebhooks('PRICE_VARIANCE_ACCEPTED', {
@@ -727,9 +775,9 @@ async function handleWorkflowCompletion(approval: any) {
       sku_code: sku.code,
       sku_name: sku.name,
       po_id: snapshot.po_id,
-      po_unit_cost_kes: snapshot.po_unit_cost_kes,
-      actual_unit_cost_kes: snapshot.actual_unit_cost_kes,
-      variance_kes: snapshot.actual_unit_cost_kes - snapshot.po_unit_cost_kes,
+      po_unit_cost_cents: snapshot.po_unit_cost_cents,
+      actual_unit_cost_cents: snapshot.actual_unit_cost_cents,
+      variance_cents: snapshot.actual_unit_cost_cents - snapshot.po_unit_cost_cents,
       effective_from: snapshot.grn_date,
       approved_workflow_id: approval.id
     });
@@ -738,8 +786,8 @@ async function handleWorkflowCompletion(approval: any) {
     createNotification(
       'PRICE_VARIANCE_ACCEPTED',
       `Price Variance Approved: ${sku.name}`,
-      `Cost price updated from KES ${(snapshot.po_unit_cost_kes/100).toFixed(2)} ` +
-      `to KES ${(snapshot.actual_unit_cost_kes/100).toFixed(2)} ` +
+      `Cost price updated from ${formatMoney(snapshot.po_unit_cost_cents)} ` +
+      `to ${formatMoney(snapshot.actual_unit_cost_cents)} ` +
       `effective from GRN date of PO ${snapshot.po_id}.`,
       'info',
       {
@@ -761,11 +809,11 @@ function getPriceAtDate(skuId: string, asOfDate: string) {
     .sort((a, b) => b.effective_from.localeCompare(a.effective_from));
   if (history.length === 0) {
     const sku = db.skus.find(s => s.id === skuId);
-    return { cost_price_kes: sku?.cost_price_kes || 0,
-             selling_price_kes: sku?.selling_price_kes || 0 };
+    return { cost_price_cents: sku?.cost_price_cents || 0,
+             selling_price_cents: sku?.selling_price_cents || 0 };
   }
-  return { cost_price_kes: history[0].cost_price_kes,
-           selling_price_kes: history[0].selling_price_kes };
+  return { cost_price_cents: history[0].cost_price_cents,
+           selling_price_cents: history[0].selling_price_cents };
 }
 
 function userHasPermission(user: User | null | undefined, permission: Permission): boolean {
@@ -781,7 +829,7 @@ function userHasPermission(user: User | null | undefined, permission: Permission
     const customRole = (db.custom_roles || []).find(r => r.id === user.custom_role_id);
     return customRole ? customRole.permissions.includes(permission) : false;
   }
-  // 5. No custom role — built-in role legacy checks govern this user
+  // 5. No custom role â€” built-in role legacy checks govern this user
   // at scattered call sites; this function returns false for them.
   return false;
 }
@@ -799,8 +847,8 @@ function computeReadinessPct(sku: SKU, categories: Category[]): number {
     !!sku.temp_zone,
     !!sku.unit,
     sku.shelf_life_days > 0,
-    sku.selling_price_kes > 0,
-    sku.cost_price_kes > 0,
+    sku.selling_price_cents > 0,
+    sku.cost_price_cents > 0,
     sku.image_urls && sku.image_urls.length > 0,
     // Vendor card: at least one active preferred vendor card
     (db.vendor_cards || []).some(
@@ -854,8 +902,8 @@ function canPublish(sku: SKU): { ok: boolean; missing: string[] } {
   if (!sku.temp_zone) missing.push('Temperature Zone');
   if (!sku.unit) missing.push('Unit');
   if (!(sku.shelf_life_days > 0)) missing.push('Shelf Life');
-  if (!(sku.selling_price_kes > 0)) missing.push('Selling Price');
-  if (!(sku.cost_price_kes > 0)) missing.push('Cost Price');
+  if (!(sku.selling_price_cents > 0)) missing.push('Selling Price');
+  if (!(sku.cost_price_cents > 0)) missing.push('Cost Price');
   if (!sku.image_urls || sku.image_urls.length === 0) missing.push('Image');
 
   const hasPreferredVendor = (db.vendor_cards || []).some(
@@ -1054,7 +1102,7 @@ async function resetState() {
         units_in_transit: 0,
         units_delivered: 18,
         customers_affected: 1,
-        estimated_value_kes: 12 * 45000
+        estimated_value_cents: 12 * 45000
       },
       customers_to_contact: [],
       created_at: new Date().toISOString(),
@@ -1121,7 +1169,7 @@ async function resetState() {
         { id:'BC-001', sku_id:'SKU-CHICK', qty_per_batch:3000, notes:'3kg chicken breast' },
         { id:'BC-002', sku_id:'SKU-RICE', qty_per_batch:500, notes:'500g rice' }
       ],
-      standard_cost_kes: 0, // dynamic
+      standard_cost_cents: 0, // dynamic
       approved_by: 'U-ADMIN', 
       approved_at: new Date(Date.now() - 5 * 24 * 3600 * 1000).toISOString(),
       created_by: 'U-OPS-A', 
@@ -1300,7 +1348,7 @@ async function resetState() {
       units_per_supplier_unit: 10,
       moq: 5,
       lead_time_days: 2,
-      price_kes: 400000,
+      price_cents: 400000,
       is_preferred: true,
       is_active: true,
       notes: 'Kenchic direct whole chicken supply',
@@ -1316,7 +1364,7 @@ async function resetState() {
       units_per_supplier_unit: 1,
       moq: 20,
       lead_time_days: 1,
-      price_kes: 48000,
+      price_cents: 48000,
       is_preferred: false,
       is_active: true,
       notes: 'Valley Fresh fallback poultry',
@@ -1386,7 +1434,7 @@ async function resetState() {
       received_by: 'U-RECEIVER',
       received_at: '2026-06-16T15:00:00Z',
       receipt_temp_celsius: 4.0,
-      total_credit_value_kes: 58000,
+      total_credit_value_cents: 58000,
       credit_issued: false,
       credit_issued_at: null,
       closed_at: null,
@@ -1406,7 +1454,7 @@ async function resetState() {
           disposition: null,
           restocked_to_location_id: null,
           write_off_id: null,
-          credit_value_kes: 58000,
+          credit_value_cents: 58000,
           inspected_by: null,
           inspected_at: null
         }
@@ -1786,7 +1834,7 @@ function getExpiryAlertDays(skuId: string): number {
 function runScheduledNotificationChecks() {
   const now = new Date();
 
-  // EXPIRY_ALERT — batches with 1 to X days to expiry, qty > 0
+  // EXPIRY_ALERT â€” batches with 1 to X days to expiry, qty > 0
   (db.batches || [])
     .filter(b => b.status === 'active' && b.quantity_available > 0)
     .forEach(b => {
@@ -1821,7 +1869,7 @@ function runScheduledNotificationChecks() {
       }
     });
 
-  // EXPIRED_STOCK_IN_BIN — batches past expiry still active with qty > 0
+  // EXPIRED_STOCK_IN_BIN â€” batches past expiry still active with qty > 0
   (db.batches || [])
     .filter(b => b.status === 'active' && b.quantity_available > 0 && new Date(b.expiry_date) < now)
     .forEach(b => {
@@ -1843,7 +1891,7 @@ function runScheduledNotificationChecks() {
       }
     });
 
-  // REORDER_LEVEL_BREACHED — SKUs where total stock < reorder_level
+  // REORDER_LEVEL_BREACHED â€” SKUs where total stock < reorder_level
   (db.skus || [])
     .filter(s => s.is_active)
     .forEach(s => {
@@ -1867,7 +1915,7 @@ function runScheduledNotificationChecks() {
       }
     });
 
-  // OVERSTOCKED_SKU — SKUs where total stock > max_stock_level (if set)
+  // OVERSTOCKED_SKU â€” SKUs where total stock > max_stock_level (if set)
   (db.skus || [])
     .filter(s => s.is_active && s.max_stock_level != null)
     .forEach(s => {
@@ -1890,7 +1938,7 @@ function runScheduledNotificationChecks() {
       }
     });
 
-  // CATALOGUE_STOCK_NO_PUBLISH — active stock for SKU not published
+  // CATALOGUE_STOCK_NO_PUBLISH â€” active stock for SKU not published
   (db.skus || [])
     .filter(s => s.is_active && (s as any).publication_status && (s as any).publication_status !== 'published')
     .forEach(s => {
@@ -1913,7 +1961,7 @@ function runScheduledNotificationChecks() {
       }
     });
 
-  // DELIVERY_LATE — dispatched deliveries not confirmed after X hours
+  // DELIVERY_LATE â€” dispatched deliveries not confirmed after X hours
   (db.deliveries || [])
     .filter(d => d.status === 'dispatched')
     .forEach(d => {
@@ -2149,7 +2197,7 @@ async function startServer() {
     const user = db.users.find(u => u.id === req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    // Only allow specific fields to be changed via this endpoint —
+    // Only allow specific fields to be changed via this endpoint â€”
     // do not allow arbitrary Object.assign of the full request body,
     // which could otherwise be used to overwrite id, created_at, or
     // other fields that should never change after creation.
@@ -2215,7 +2263,7 @@ async function startServer() {
       password_hash: hashPassword(tempPassword),
       must_reset_password: true,
       role: hasBuiltInRole ? role : 'picker', // safe minimal-privilege
-        // fallback label when a custom role is assigned — the
+        // fallback label when a custom role is assigned â€” the
         // actual access is governed entirely by custom_role_id
         // once set (see userHasPermission), this field is only a
         // display/legacy fallback in that case
@@ -2233,7 +2281,7 @@ async function startServer() {
 
     // Return the temp password ONCE, in this response only. It is
     // never stored in plaintext and never retrievable again after
-    // this response — same one-time-reveal pattern already used
+    // this response â€” same one-time-reveal pattern already used
     // for API key generation elsewhere in this file.
     res.json({
       data: newUser,
@@ -2438,7 +2486,7 @@ async function startServer() {
     res.json({ data: { reassigned: count } });
   });
 
-  // GET /api/v1/users/:id/permissions — effective permissions for a user
+  // GET /api/v1/users/:id/permissions â€” effective permissions for a user
   app.get('/api/v1/users/:id/permissions', (req, res) => {
     if (db.currentUser?.role !== 'admin') {
       return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Admin only.' } });
@@ -2470,7 +2518,7 @@ async function startServer() {
     });
   });
 
-  // PATCH /api/v1/users/:id/permissions — update per-user overrides
+  // PATCH /api/v1/users/:id/permissions â€” update per-user overrides
   app.patch('/api/v1/users/:id/permissions', async (req, res) => {
     if (db.currentUser?.role !== 'admin') {
       return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Admin only.' } });
@@ -2518,7 +2566,7 @@ async function startServer() {
     res.json({ data: { id: user.id, granted_permissions: user.granted_permissions, revoked_permissions: user.revoked_permissions } });
   });
 
-  // List all workflow approvals — filterable by status and type
+  // List all workflow approvals â€” filterable by status and type
   app.get('/api/v1/workflow-approvals', (req, res) => {
     let approvals = db.workflow_approvals || [];
     if (req.query.status) {
@@ -2587,7 +2635,7 @@ async function startServer() {
     res.json({ data: template });
   });
 
-  // Action on a specific stage — approve or reject
+  // Action on a specific stage â€” approve or reject
   app.post('/api/v1/workflow-approvals/:id/action', async (req, res) => {
     const approval = (db.workflow_approvals || []).find(a => a.id === req.params.id);
     if (!approval) {
@@ -2618,7 +2666,7 @@ async function startServer() {
       });
     }
 
-    // Self-approval guard — same principle as all other approval flows
+    // Self-approval guard â€” same principle as all other approval flows
     if (approval.raised_by === uid) {
       return res.status(422).json({
         error: { code: 'SELF_APPROVAL_PROHIBITED', message: 'You cannot approve a workflow you raised yourself.' }
@@ -2660,7 +2708,7 @@ async function startServer() {
           }
         );
       } else {
-        // All stages approved — complete the workflow
+        // All stages approved â€” complete the workflow
         approval.status = 'approved';
         approval.resolved_at = new Date().toISOString();
         logAudit('WORKFLOW_APPROVED', approval.entity_type, approval.entity_id,
@@ -2765,8 +2813,8 @@ async function startServer() {
       recorded_at: recordedAt,
       device_id: `SENSOR-${zone.id}`,
       notes: is_breach
-        ? `🚨 Temperature breach: ${tempVal}°C is outside zone '${zone.name}' min/max limit of [${zone.min_temp_celsius}°C, ${zone.max_temp_celsius}°C]`
-        : `Temperature within limits: ${tempVal}°C for zone '${zone.name}'`
+        ? `ðŸš¨ Temperature breach: ${tempVal}Â°C is outside zone '${zone.name}' min/max limit of [${zone.min_temp_celsius}Â°C, ${zone.max_temp_celsius}Â°C]`
+        : `Temperature within limits: ${tempVal}Â°C for zone '${zone.name}'`
     });
     
     // Auto save
@@ -3045,7 +3093,7 @@ async function startServer() {
     }
     const bl = db.bin_locations.find(b => b.id === req.params.id);
     if (!bl) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Bin location not found' } });
-    // Check stock assigned — look for stock ledger entries at matching location code
+    // Check stock assigned â€” look for stock ledger entries at matching location code
     const locMatch = db.locations.find(l => l.code === bl.code && l.warehouse_id === bl.warehouse_id);
     if (locMatch) {
       const stock = db.stock_ledger
@@ -3182,13 +3230,13 @@ async function startServer() {
       return res.status(404).json({ error: 'SKU not found' });
     }
 
-    const { cost_price_kes, selling_price_kes, effective_from, reason, notes } = req.body;
+    const { cost_price_cents, selling_price_cents, effective_from, reason, notes } = req.body;
 
-    if (cost_price_kes === undefined || isNaN(parseInt(cost_price_kes))) {
-      return res.status(400).json({ error: { message: 'cost_price_kes is required and must be a number.' } });
+    if (cost_price_cents === undefined || isNaN(parseInt(cost_price_cents))) {
+      return res.status(400).json({ error: { message: 'cost_price_cents is required and must be a number.' } });
     }
-    if (selling_price_kes === undefined || isNaN(parseInt(selling_price_kes))) {
-      return res.status(400).json({ error: { message: 'selling_price_kes is required and must be a number.' } });
+    if (selling_price_cents === undefined || isNaN(parseInt(selling_price_cents))) {
+      return res.status(400).json({ error: { message: 'selling_price_cents is required and must be a number.' } });
     }
     if (!reason) {
       return res.status(400).json({ error: { message: 'reason is required.' } });
@@ -3198,8 +3246,8 @@ async function startServer() {
       id: `PH-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
       sku_id: sku.id,
       effective_from: effective_from || new Date().toISOString(),
-      cost_price_kes: parseInt(cost_price_kes),
-      selling_price_kes: parseInt(selling_price_kes),
+      cost_price_cents: parseInt(cost_price_cents),
+      selling_price_cents: parseInt(selling_price_cents),
       reason,
       notes: notes || null,
       changed_by: db.currentUser?.name || 'SYSTEM',
@@ -3211,11 +3259,11 @@ async function startServer() {
     db.price_history.push(priceRecord);
 
     // Keep SKU in sync
-    sku.cost_price_kes = parseInt(cost_price_kes);
-    sku.selling_price_kes = parseInt(selling_price_kes);
+    sku.cost_price_cents = parseInt(cost_price_cents);
+    sku.selling_price_cents = parseInt(selling_price_cents);
 
     logAudit('SKU_PRICE_CHANGED', 'SKU', sku.id,
-      `${sku.name} price changed. Cost: ${cost_price_kes}, Selling: ${selling_price_kes} by ${db.currentUser?.name}`
+      `${sku.name} price changed. Cost: ${cost_price_cents}, Selling: ${selling_price_cents} by ${db.currentUser?.name}`
     );
 
     await saveState();
@@ -3264,7 +3312,7 @@ async function startServer() {
         .reduce((sum: number, e: any) => sum + (e.quantity !== undefined ? e.quantity : (e.qty_change || 0)), 0);
 
       if (stockOnHand > 0) {
-        // Return 200 with requires_confirmation — NOT a 4xx error.
+        // Return 200 with requires_confirmation â€” NOT a 4xx error.
         // The frontend must check for this flag and show a modal.
         return res.status(200).json({
           requires_confirmation: true,
@@ -3290,7 +3338,7 @@ async function startServer() {
     // blocked and draft: is_active stays as-is (stock tracked, not orderable)
 
     logAudit('SKU_STATUS_CHANGED', 'SKU', sku.id,
-      `${sku.name} status: ${previousStatus} → ${new_status} ` +
+      `${sku.name} status: ${previousStatus} â†’ ${new_status} ` +
       `by ${db.currentUser?.name}`
     );
 
@@ -3343,7 +3391,7 @@ async function startServer() {
       );
     }
 
-    // Group by SKU — sum quantity per SKU
+    // Group by SKU â€” sum quantity per SKU
     const stockBySku: Record<string, number> = {};
     ledgerEntries.forEach((e: any) => {
       const qty = e.quantity !== undefined ? e.quantity : (e.qty_change || 0);
@@ -3356,7 +3404,7 @@ async function startServer() {
       .map(([skuId]) => skuId);
 
     // Of those, find which ones have NO ledger entry with a
-    // non-null bin_location_id/location_id at all — meaning they have never
+    // non-null bin_location_id/location_id at all â€” meaning they have never
     // been assigned a bin location in this warehouse
     const skuIdsWithBin = new Set(
       ledgerEntries
@@ -3441,7 +3489,7 @@ async function startServer() {
         );
         item_count = skuIds.size;
       } else {
-        // No filter configured yet — show total active published SKUs
+        // No filter configured yet â€” show total active published SKUs
         // as a starting point until zones/bins are linked
         item_count = (db.skus || []).filter(s =>
           s.is_active && s.publication_status === 'published'
@@ -3554,7 +3602,7 @@ async function startServer() {
     // Auto-generate product code from category numeric prefix
     // + next available 3-digit sequence within that category.
     // Format: {category.numeric_code}{zero-padded 3-digit sequence}
-    // e.g. category 300 → first product = '300001', second = '300002'
+    // e.g. category 300 â†’ first product = '300001', second = '300002'
     const category_id = req.body.category_id;
     const category = (db.categories || []).find(c => c.id === category_id);
     if (!category) {
@@ -3778,7 +3826,7 @@ async function startServer() {
     // Auto-assign numeric_code:
     // If parent_id is set, find the parent's numeric_code and add
     // the next available 10-increment offset within that parent
-    // (e.g. parent 300 → children use 310, 320, 330...).
+    // (e.g. parent 300 â†’ children use 310, 320, 330...).
     // If no parent_id, assign the next available 100-multiple.
     let numericCode;
     if (parent_id) {
@@ -4273,7 +4321,7 @@ async function startServer() {
         sku_id: l.sku_id,
         qty_ordered: l.qty_ordered,
         qty_received: 0,
-        unit_cost_kes: l.unit_cost_kes,
+        unit_cost_cents: l.unit_cost_cents,
         bom_linked: l.bom_linked ?? false
       };
       db.purchase_order_lines.push(line);
@@ -4487,17 +4535,17 @@ async function startServer() {
         }
 
         // Determine price variance
-        const inputActualUnitCost = reqLine.actual_unit_cost_kes;
-        const actual_unit_cost_kes = (inputActualUnitCost !== null && inputActualUnitCost !== undefined)
+        const inputActualUnitCost = reqLine.actual_unit_cost_cents;
+        const actual_unit_cost_cents = (inputActualUnitCost !== null && inputActualUnitCost !== undefined)
           ? Number(inputActualUnitCost)
-          : poLine.unit_cost_kes;
-        const price_variance_kes = actual_unit_cost_kes - poLine.unit_cost_kes;
+          : poLine.unit_cost_cents;
+        const price_variance_cents = actual_unit_cost_cents - poLine.unit_cost_cents;
         let variance_workflow_id: string | null = null;
 
         const sku = db.skus.find(s => s.id === poLine.sku_id)!;
         const grLineId = `GRL-${Math.floor(Math.random()*100000)}`;
 
-        if (price_variance_kes !== 0) {
+        if (price_variance_cents !== 0) {
           const template = (db.workflow_templates || []).find(
             t => t.type === 'PRICE_VARIANCE' && t.is_active
           );
@@ -4516,9 +4564,9 @@ async function startServer() {
                 sku_id: poLine.sku_id,
                 po_id: po.id,
                 grn_date: receivedAt,
-                actual_unit_cost_kes: actual_unit_cost_kes,
-                po_unit_cost_kes: poLine.unit_cost_kes,
-                selling_price_kes_current: sku.selling_price_kes
+                actual_unit_cost_cents: actual_unit_cost_cents,
+                po_unit_cost_cents: poLine.unit_cost_cents,
+                selling_price_cents_current: sku.selling_price_cents
               },
               status: 'pending',
               raised_by: db.currentUser?.id || 'U-RECEIVER',
@@ -4561,8 +4609,8 @@ async function startServer() {
           put_away_location_id: reqLine.put_away_location_id || null,
           put_away_at: reqLine.put_away_location_id ? receivedAt : null,
           put_away_by: reqLine.put_away_location_id ? (db.currentUser?.id || 'U-RECEIVER') : null,
-          actual_unit_cost_kes,
-          price_variance_kes,
+          actual_unit_cost_cents,
+          price_variance_cents,
           variance_workflow_id
         };
         db.goods_receipt_lines.push(grLine);
@@ -4942,7 +4990,7 @@ async function startServer() {
           continue;
         }
 
-        // Bundle SKU — resolve to components
+        // Bundle SKU â€” resolve to components
         const bundleDef = db.bundle_definitions.find(
           b => b.bundle_sku_id === line.sku_id && b.is_active
         );
@@ -4974,7 +5022,7 @@ async function startServer() {
           resolvedLines.push({
             sku_id: component.sku_id,
             qty_ordered: totalQtyNeeded,
-            unit_price_kes: 0,
+            unit_price_cents: 0,
             is_bundle_component: true,
             bundle_sku_id: line.sku_id,
             bundle_sku_name: sku.name,
@@ -5029,7 +5077,7 @@ async function startServer() {
             throw {
               code: 'BUNDLE_COMPONENT_INSUFFICIENT',
               status: 422,
-              message: `Cannot fulfil ${line.original_bundle_qty} × ${line.bundle_sku_name}: ${compSku?.name || line.sku_id} needs ${qtyNeeded} units, only ${totalUnreserved} available.`,
+              message: `Cannot fulfil ${line.original_bundle_qty} Ã— ${line.bundle_sku_name}: ${compSku?.name || line.sku_id} needs ${qtyNeeded} units, only ${totalUnreserved} available.`,
               bundle_sku_id: line.bundle_sku_id,
               limiting_component: {
                 sku_id: line.sku_id,
@@ -5109,7 +5157,7 @@ async function startServer() {
             throw {
               code: 'BUNDLE_COMPONENT_INSUFFICIENT',
               status: 422,
-              message: `Cannot fulfil ${line.original_bundle_qty} × ${line.bundle_sku_name}: ${compSku?.name || line.sku_id} needs ${line.qty_ordered} units, only ${line.qty_ordered - qtyNeeded} available.`,
+              message: `Cannot fulfil ${line.original_bundle_qty} Ã— ${line.bundle_sku_name}: ${compSku?.name || line.sku_id} needs ${line.qty_ordered} units, only ${line.qty_ordered - qtyNeeded} available.`,
               bundle_sku_id: line.bundle_sku_id,
               limiting_component: {
                 sku_id: line.sku_id,
@@ -5324,7 +5372,7 @@ async function startServer() {
       pl.status = 'completed';
       pl.completed_at = new Date().toISOString();
 
-      // Picking complete — order now moves to packing, not packed.
+      // Picking complete â€” order now moves to packing, not packed.
       // A different person must confirm packing (see
       // /api/v1/orders/:id/complete-packing below).
       const order = db.customer_orders.find(o => o.id === pl.order_id);
@@ -5512,7 +5560,7 @@ async function startServer() {
     let breachLogged = false;
     if (hasColdChainItems && temp_log) {
       const temp = temp_log.temperature_celsius;
-      // standard chilled target: 0°C to 4°C
+      // standard chilled target: 0Â°C to 4Â°C
       if (temp < 0 || temp > 4) {
         breachLogged = true;
         // create breach temp log
@@ -5527,7 +5575,7 @@ async function startServer() {
           recorded_by: db.currentUser?.id || 'U-DRIVER',
           recorded_at: new Date().toISOString(),
           device_id: vehicle_id || 'HANDHELD-CONSOLE',
-          notes: `TEMP DISPATCH BREACH: Temp recorded ${temp}°C exceeds limits for cold chain delivery.`
+          notes: `TEMP DISPATCH BREACH: Temp recorded ${temp}Â°C exceeds limits for cold chain delivery.`
         });
       } else {
         // normal log
@@ -5879,10 +5927,10 @@ async function startServer() {
     db.asset_events.push(event);
 
     logAudit('ASSET_EVENT', 'Asset', asset.id,
-      `${event_type} — ${asset.uid || asset.id} ` +
-      `(${fromStatus} → ${toStatus})` +
+      `${event_type} â€” ${asset.uid || asset.id} ` +
+      `(${fromStatus} â†’ ${toStatus})` +
       (reference_id ? ` ref: ${reference_id}` : '') +
-      (notes ? ` — ${notes}` : '')
+      (notes ? ` â€” ${notes}` : '')
     );
 
     await saveState();
@@ -6150,13 +6198,13 @@ async function startServer() {
       }
     });
 
-    let estimated_value_kes = 0;
+    let estimated_value_cents = 0;
     affectedBatchIds.forEach(bid => {
       const bat = db.batches.find(b => b.id === bid);
       if (bat) {
         const sku = db.skus.find(s => s.id === bat.sku_id);
         if (sku) {
-          estimated_value_kes += (getStockForBatch(bat.id) || 0) * (sku.cost_price_kes || 0);
+          estimated_value_cents += (getStockForBatch(bat.id) || 0) * (sku.cost_price_cents || 0);
         }
       }
     });
@@ -6176,7 +6224,7 @@ async function startServer() {
         units_in_transit,
         units_delivered,
         customers_affected: affectedCustomerIds.size,
-        estimated_value_kes
+        estimated_value_cents
       },
       customers_to_contact: [],
       created_at: new Date().toISOString(),
@@ -6204,7 +6252,7 @@ async function startServer() {
       return res.status(404).json({ error: { code: 'RECALL_NOT_FOUND', message: 'Recall not found' } });
     }
 
-    // Step 1 — STOCK REMOVAL
+    // Step 1 â€” STOCK REMOVAL
     for (const batchId of recall.batch_ids) {
       const bat = db.batches.find(b => b.id === batchId);
       if (!bat) continue;
@@ -6264,7 +6312,7 @@ async function startServer() {
       });
     }
 
-    // Step 2 — PICK LIST CANCELLATION
+    // Step 2 â€” PICK LIST CANCELLATION
     const affectedPklLines = db.pick_list_lines.filter(l => 
       recall.batch_ids.includes(l.batch_id) && l.status !== 'picked' && l.status !== 'skipped'
     );
@@ -6296,13 +6344,13 @@ async function startServer() {
           reference_type: 'pick_list',
           automated: true,
           status: 'done',
-          description: `Cancelled pick list ${pl.id} — affected batch recalled`,
+          description: `Cancelled pick list ${pl.id} â€” affected batch recalled`,
           executed_at: new Date().toISOString()
         });
       }
     }
 
-    // Step 3 — IN-TRANSIT DRIVER RECALL
+    // Step 3 â€” IN-TRANSIT DRIVER RECALL
     const dispatchedDeliveries = db.deliveries.filter(d => d.status === 'dispatched');
     for (const del of dispatchedDeliveries) {
       const order = db.customer_orders.find(o => o.id === del.order_id);
@@ -6323,7 +6371,7 @@ async function startServer() {
               reference_type: 'delivery',
               automated: true,
               status: 'done',
-              description: `Driver on delivery ${del.id} recalled — return to warehouse`,
+              description: `Driver on delivery ${del.id} recalled â€” return to warehouse`,
               executed_at: new Date().toISOString()
             });
           }
@@ -6331,7 +6379,7 @@ async function startServer() {
       }
     }
 
-    // Step 4 — CUSTOMER CONTACT LIST
+    // Step 4 â€” CUSTOMER CONTACT LIST
     const deliveredOrders = db.customer_orders.filter(o => o.status === 'delivered');
     const contactList: any[] = [];
 
@@ -6381,7 +6429,7 @@ async function startServer() {
       executed_at: new Date().toISOString()
     });
 
-    // Step 5 — SUPPLIER CLAIM
+    // Step 5 â€” SUPPLIER CLAIM
     if (recall.disposition === 'return_to_supplier') {
       let totalQty = 0;
       let totalValue = 0;
@@ -6416,7 +6464,7 @@ async function startServer() {
         });
       }
 
-      totalValue = recall.exposure_snapshot?.estimated_value_kes || 0;
+      totalValue = recall.exposure_snapshot?.estimated_value_cents || 0;
 
       db.recall_actions.push({
         id: `ACT-${Math.floor(Math.random() * 1000000)}`,
@@ -6426,7 +6474,7 @@ async function startServer() {
         reference_type: null,
         automated: true,
         status: 'done',
-        description: `Claim for ${totalQty} units at KES ${(totalValue/100).toFixed(2)} against supplier ${supplierName} referencing GRN ${grnNumber}`,
+        description: `Claim for ${totalQty} units at ${formatMoney(totalValue)} against supplier ${supplierName} referencing GRN ${grnNumber}`,
         executed_at: new Date().toISOString()
       });
     }
@@ -6831,7 +6879,7 @@ async function startServer() {
       return res.status(422).json({ error: 'Please count all lines before submitting sheets.' });
     }
 
-    // Check if any line variance exceeds threshold (±5% or ±1 unit - BR-040)
+    // Check if any line variance exceeds threshold (Â±5% or Â±1 unit - BR-040)
     const requiresApproval = lines.some(l => {
       const v = l.variance || 0;
       const pct = Math.abs(l.variance_pct || 0);
@@ -6945,10 +6993,10 @@ async function startServer() {
       if (!allowedReasons.includes(l.reason)) {
         return res.status(400).json({ error: { code: 'INVALID_REASON', message: `Reason '${l.reason}' is unauthorized. Allowed: ${allowedReasons.join(', ')}` } });
       }
-      if (!l.value_kes || l.value_kes <= 0) {
-        return res.status(400).json({ error: { code: 'VALUE_REQUIRED', message: 'Real estimated value KES (> 0) must be supplied to write-off lines' } });
+      if (!l.value_cents || l.value_cents <= 0) {
+        return res.status(400).json({ error: { code: 'VALUE_REQUIRED', message: 'Real estimated value (> 0) must be supplied to write-off lines' } });
       }
-      totalKes += l.value_kes;
+      totalKes += l.value_cents;
     }
 
     const woId = `WO-${Date.now().toString().slice(-4)}`;
@@ -6960,7 +7008,7 @@ async function startServer() {
       approved_by: null,
       created_at: new Date().toISOString(),
       approved_at: null,
-      total_value_kes: totalKes,
+      total_value_cents: totalKes,
       notes: notes || 'Damaged product write off'
     };
 
@@ -6973,19 +7021,19 @@ async function startServer() {
         location_id: l.location_id,
         qty: l.qty,
         reason: l.reason,
-        value_kes: l.value_kes,
+        value_cents: l.value_cents,
         notes: l.notes || null
       });
     });
 
     db.write_offs.push(newWo);
 
-    if (totalKes >= CONFIG.WRITE_OFF_HIGH_VALUE_KES) {
+    if (totalKes >= CONFIG.WRITE_OFF_HIGH_VALUE_cents) {
       const approvalCode = 'MAP-' + Date.now().toString().slice(-6);
       const approvalSlip: MarkdownApproval = {
         id: approvalCode,
         write_off_id: woId,
-        total_value_kes: totalKes,
+        total_value_cents: totalKes,
         status: 'pending',
         warehouse_id: warehouse_id || 'W-MAIN',
         raised_by: db.currentUser?.id || 'U-OPS-A',
@@ -7000,7 +7048,7 @@ async function startServer() {
       createNotification(
         'MARKDOWN_PENDING',
         'Markdown Approval Required',
-        `High-value write-off '${woId}' of KES ${totalKes} requires admin markdown approval prior to inventory settlement.`,
+        `High-value write-off '${woId}' of ${formatMoney(totalKes)} requires admin markdown approval prior to inventory settlement.`,
         'warning',
         { reference_id: woId, reference_type: 'write_off' }
       );
@@ -7008,7 +7056,7 @@ async function startServer() {
       createNotification(
         'WRITE_OFF_PENDING',
         'Write-off Settlement Pending',
-        `Standard value write-off '${woId}' of KES ${totalKes} submitted.`,
+        `Standard value write-off '${woId}' of ${formatMoney(totalKes)} submitted.`,
         'info',
         { reference_id: woId, reference_type: 'write_off' }
       );
@@ -7024,11 +7072,11 @@ async function startServer() {
     const wo = db.write_offs.find(w => w.id === woId);
     if (!wo) return res.status(404).json({ error: 'Write-off not found' });
 
-    if (wo.total_value_kes >= CONFIG.WRITE_OFF_HIGH_VALUE_KES) {
+    if (wo.total_value_cents >= CONFIG.WRITE_OFF_HIGH_VALUE_cents) {
       return res.status(403).json({
         error: {
           code: 'HIGH_VALUE_MARKDOWN_REQUIRED',
-          message: `Write-off exceeds the high value markdown threshold of KES ${CONFIG.WRITE_OFF_HIGH_VALUE_KES}. Authorizing this settlement is protected and must be executed by signing the Markdown Approval slip.`
+          message: `Write-off exceeds the high value markdown threshold of ${formatMoney(CONFIG.WRITE_OFF_HIGH_VALUE_cents)}. Authorizing this settlement is protected and must be executed by signing the Markdown Approval slip.`
         }
       });
     }
@@ -7156,26 +7204,26 @@ async function startServer() {
   app.get('/api/v1/reports/waste-summary', (req, res) => {
     // Sourced from approved write-offs. Returns totals grouped by reason/sku
     const approvedWos = db.write_offs.filter(w => w.status === 'approved');
-    const reasonGroups: { [key: string]: { total_qty: number; total_value_kes: number } } = {};
+    const reasonGroups: { [key: string]: { total_qty: number; total_value_cents: number } } = {};
 
     approvedWos.forEach(wo => {
       const wLines = db.write_off_lines.filter(l => l.write_off_id === wo.id);
       wLines.forEach(l => {
         if (!reasonGroups[l.reason]) {
-          reasonGroups[l.reason] = { total_qty: 0, total_value_kes: 0 };
+          reasonGroups[l.reason] = { total_qty: 0, total_value_cents: 0 };
         }
         reasonGroups[l.reason].total_qty += l.qty;
-        reasonGroups[l.reason].total_value_kes += l.value_kes;
+        reasonGroups[l.reason].total_value_cents += l.value_cents;
       });
     });
 
-    const totalRevenue = db.customer_orders.reduce((sum, o) => sum + o.total_value_kes, 0);
+    const totalRevenue = db.customer_orders.reduce((sum, o) => sum + o.total_value_cents, 0);
 
     const data = Object.entries(reasonGroups).map(([group, val]) => ({
       group,
       total_qty: val.total_qty,
-      total_value_kes: val.total_value_kes,
-      pct_of_revenue: totalRevenue > 0 ? parseFloat(((val.total_value_kes / totalRevenue) * 100).toFixed(2)) : 0
+      total_value_cents: val.total_value_cents,
+      pct_of_revenue: totalRevenue > 0 ? parseFloat(((val.total_value_cents / totalRevenue) * 100).toFixed(2)) : 0
     }));
 
     res.json({ data });
@@ -7214,21 +7262,21 @@ async function startServer() {
     pickEntries.forEach(entry => {
       const sku = db.skus.find(s => s.id === entry.sku_id);
       if (sku) {
-        cogsCents += Math.abs(entry.quantity) * sku.cost_price_kes;
+        cogsCents += Math.abs(entry.quantity) * sku.cost_price_cents;
       }
     });
 
     // Opening vs closing stock values
     let totalStockCents = 0;
     db.skus.forEach(s => {
-      totalStockCents += getSKUTotalStock(s.id) * s.cost_price_kes;
+      totalStockCents += getSKUTotalStock(s.id) * s.cost_price_cents;
     });
 
-    const cogs_kes = Math.round(cogsCents);
-    const avg_inventory_value_kes = Math.round(totalStockCents);
-    const turnover_ratio = avg_inventory_value_kes > 0 ? parseFloat((cogs_kes / avg_inventory_value_kes).toFixed(2)) : 0;
+    const cogs_cents = Math.round(cogsCents);
+    const avg_inventory_value_cents = Math.round(totalStockCents);
+    const turnover_ratio = avg_inventory_value_cents > 0 ? parseFloat((cogs_cents / avg_inventory_value_cents).toFixed(2)) : 0;
 
-    res.json({ data: { cogs_kes, avg_inventory_value_kes, turnover_ratio } });
+    res.json({ data: { cogs_cents, avg_inventory_value_cents, turnover_ratio } });
   });
 
   // Margins report (B5)
@@ -7239,7 +7287,7 @@ async function startServer() {
     const items = db.customer_order_lines.map(line => {
       const order = db.customer_orders.find(o => o.id === line.order_id);
       const sku = db.skus.find(s => s.id === line.sku_id);
-      const lineRevenue = line.qty_ordered * (line.unit_price_kes || sku?.selling_price_kes || 0);
+      const lineRevenue = line.qty_ordered * (line.unit_price_cents || sku?.selling_price_cents || 0);
       
       const orderDate = order?.created_at || new Date().toISOString();
 
@@ -7248,13 +7296,13 @@ async function startServer() {
         const bd = (db.bundle_definitions || []).find(b => b.bundle_sku_id === sku.id);
         if (bd) {
           bd.components.forEach(comp => {
-            const compCost = getPriceAtDate(comp.sku_id, orderDate).cost_price_kes;
+            const compCost = getPriceAtDate(comp.sku_id, orderDate).cost_price_cents;
             lineCogs += comp.qty * compCost;
           });
         }
         lineCogs *= line.qty_ordered;
       } else if (sku) {
-        const skuCost = getPriceAtDate(sku.id, orderDate).cost_price_kes;
+        const skuCost = getPriceAtDate(sku.id, orderDate).cost_price_cents;
         lineCogs = line.qty_ordered * skuCost;
       }
 
@@ -7269,9 +7317,9 @@ async function startServer() {
         sku_id: line.sku_id,
         sku_name: sku?.name || 'Unknown',
         qty_ordered: line.qty_ordered,
-        revenue_kes: lineRevenue,
-        cogs_kes: lineCogs,
-        profit_kes: profit,
+        revenue_cents: lineRevenue,
+        cogs_cents: lineCogs,
+        profit_cents: profit,
         margin_pct: marginPct,
         is_bundle: sku?.is_bundle ?? false,
         created_at: order?.created_at
@@ -7283,9 +7331,9 @@ async function startServer() {
 
     res.json({
       data: {
-        total_revenue_kes: totalRevenue,
-        total_cogs_kes: totalCogs,
-        total_profit_kes: overallProfit,
+        total_revenue_cents: totalRevenue,
+        total_cogs_cents: totalCogs,
+        total_profit_cents: overallProfit,
         gross_margin_pct: overallMarginPct,
         items
       }
@@ -7294,7 +7342,7 @@ async function startServer() {
 
   // Margins grouped by SKU (B5)
   app.get(['/api/v1/reports/margin-by-sku', '/api/v1/reports/margin-by-sku'], (req, res) => {
-    const skuMap: { [skuId: string]: { sku_id: string; sku_name: string; qty_ordered: number; revenue_kes: number; cogs_kes: number; profit_kes: number; margin_pct: number; } } = {};
+    const skuMap: { [skuId: string]: { sku_id: string; sku_name: string; qty_ordered: number; revenue_cents: number; cogs_cents: number; profit_cents: number; margin_pct: number; } } = {};
 
     db.customer_order_lines.forEach(line => {
       const order = db.customer_orders.find(o => o.id === line.order_id);
@@ -7304,20 +7352,20 @@ async function startServer() {
       const orderDate = order?.created_at || new Date().toISOString();
 
       const qty = line.qty_ordered;
-      const revenue = qty * (line.unit_price_kes || sku.selling_price_kes || 0);
+      const revenue = qty * (line.unit_price_cents || sku.selling_price_cents || 0);
 
       let cogs = 0;
       if (sku.is_bundle) {
         const bd = (db.bundle_definitions || []).find(b => b.bundle_sku_id === sku.id);
         if (bd) {
           bd.components.forEach(comp => {
-            const compCost = getPriceAtDate(comp.sku_id, orderDate).cost_price_kes;
+            const compCost = getPriceAtDate(comp.sku_id, orderDate).cost_price_cents;
             cogs += comp.qty * compCost;
           });
         }
         cogs *= qty;
       } else {
-        const skuCost = getPriceAtDate(sku.id, orderDate).cost_price_kes;
+        const skuCost = getPriceAtDate(sku.id, orderDate).cost_price_cents;
         cogs = qty * skuCost;
       }
 
@@ -7326,24 +7374,24 @@ async function startServer() {
           sku_id: sku.id,
           sku_name: sku.name,
           qty_ordered: 0,
-          revenue_kes: 0,
-          cogs_kes: 0,
-          profit_kes: 0,
+          revenue_cents: 0,
+          cogs_cents: 0,
+          profit_cents: 0,
           margin_pct: 0
         };
       }
 
       skuMap[sku.id].qty_ordered += qty;
-      skuMap[sku.id].revenue_kes += revenue;
-      skuMap[sku.id].cogs_kes += cogs;
+      skuMap[sku.id].revenue_cents += revenue;
+      skuMap[sku.id].cogs_cents += cogs;
     });
 
     const data = Object.values(skuMap).map(item => {
-      const profit = item.revenue_kes - item.cogs_kes;
-      const margin_pct = item.revenue_kes > 0 ? parseFloat(((profit / item.revenue_kes) * 100).toFixed(2)) : 0;
+      const profit = item.revenue_cents - item.cogs_cents;
+      const margin_pct = item.revenue_cents > 0 ? parseFloat(((profit / item.revenue_cents) * 100).toFixed(2)) : 0;
       return {
         ...item,
-        profit_kes: profit,
+        profit_cents: profit,
         margin_pct
       };
     });
@@ -7353,7 +7401,7 @@ async function startServer() {
 
   // Margins grouped by Order (B5)
   app.get(['/api/v1/reports/margin-by-order', '/api/v1/reports/margin-by-order'], (req, res) => {
-    const orderMap: { [orderId: string]: { order_id: string; customer_name: string; qty_ordered: number; revenue_kes: number; cogs_kes: number; profit_kes: number; margin_pct: number; created_at: string } } = {};
+    const orderMap: { [orderId: string]: { order_id: string; customer_name: string; qty_ordered: number; revenue_cents: number; cogs_cents: number; profit_cents: number; margin_pct: number; created_at: string } } = {};
 
     db.customer_order_lines.forEach(line => {
       const order = db.customer_orders.find(o => o.id === line.order_id);
@@ -7363,20 +7411,20 @@ async function startServer() {
       const orderDate = order?.created_at || new Date().toISOString();
 
       const qty = line.qty_ordered;
-      const revenue = qty * (line.unit_price_kes || sku.selling_price_kes || 0);
+      const revenue = qty * (line.unit_price_cents || sku.selling_price_cents || 0);
 
       let cogs = 0;
       if (sku.is_bundle) {
         const bd = (db.bundle_definitions || []).find(b => b.bundle_sku_id === sku.id);
         if (bd) {
           bd.components.forEach(comp => {
-            const compCost = getPriceAtDate(comp.sku_id, orderDate).cost_price_kes;
+            const compCost = getPriceAtDate(comp.sku_id, orderDate).cost_price_cents;
             cogs += comp.qty * compCost;
           });
         }
         cogs *= qty;
       } else {
-        const skuCost = getPriceAtDate(sku.id, orderDate).cost_price_kes;
+        const skuCost = getPriceAtDate(sku.id, orderDate).cost_price_cents;
         cogs = qty * skuCost;
       }
 
@@ -7386,25 +7434,25 @@ async function startServer() {
           order_id: line.order_id,
           customer_name: customer?.name || 'Unknown',
           qty_ordered: 0,
-          revenue_kes: 0,
-          cogs_kes: 0,
-          profit_kes: 0,
+          revenue_cents: 0,
+          cogs_cents: 0,
+          profit_cents: 0,
           margin_pct: 0,
           created_at: order?.created_at || new Date().toISOString()
         };
       }
 
       orderMap[line.order_id].qty_ordered += qty;
-      orderMap[line.order_id].revenue_kes += revenue;
-      orderMap[line.order_id].cogs_kes += cogs;
+      orderMap[line.order_id].revenue_cents += revenue;
+      orderMap[line.order_id].cogs_cents += cogs;
     });
 
     const data = Object.values(orderMap).map(item => {
-      const profit = item.revenue_kes - item.cogs_kes;
-      const margin_pct = item.revenue_kes > 0 ? parseFloat(((profit / item.revenue_kes) * 100).toFixed(2)) : 0;
+      const profit = item.revenue_cents - item.cogs_cents;
+      const margin_pct = item.revenue_cents > 0 ? parseFloat(((profit / item.revenue_cents) * 100).toFixed(2)) : 0;
       return {
         ...item,
-        profit_kes: profit,
+        profit_cents: profit,
         margin_pct
       };
     });
@@ -8179,9 +8227,9 @@ async function startServer() {
       output_qty_actual: null,
       output_batch_id: output_batch_id || `BAT-${Math.floor(100000 + Math.random() * 900000)}`,
       output_expiry_date: output_expiry_date || new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().split('T')[0],
-      standard_cost_kes: recipe.standard_cost_kes * (batches_planned || 1),
-      actual_cost_kes: null,
-      cost_variance_kes: null,
+      standard_cost_cents: recipe.standard_cost_cents * (batches_planned || 1),
+      actual_cost_cents: null,
+      cost_variance_cents: null,
       initiated_by: db.currentUser?.id || 'WMS_ENGINE',
       scheduled_start: new Date().toISOString(),
       actual_start: null,
@@ -8306,18 +8354,18 @@ async function startServer() {
     pickEntries.forEach(entry => {
       const sku = db.skus.find(s => s.id === entry.sku_id);
       if (sku) {
-        cogsCents += Math.abs(entry.quantity) * sku.cost_price_kes;
+        cogsCents += Math.abs(entry.quantity) * sku.cost_price_cents;
       }
     });
 
     let totalStockCents = 0;
     db.skus.forEach(s => {
-      totalStockCents += getSKUTotalStock(s.id) * s.cost_price_kes;
+      totalStockCents += getSKUTotalStock(s.id) * s.cost_price_cents;
     });
 
-    const cogs_kes = Math.round(cogsCents);
-    const avg_inventory_value_kes = Math.round(totalStockCents);
-    const turnover_ratio = avg_inventory_value_kes > 0 ? parseFloat((cogs_kes / avg_inventory_value_kes).toFixed(2)) : 0;
+    const cogs_cents = Math.round(cogsCents);
+    const avg_inventory_value_cents = Math.round(totalStockCents);
+    const turnover_ratio = avg_inventory_value_cents > 0 ? parseFloat((cogs_cents / avg_inventory_value_cents).toFixed(2)) : 0;
 
     // 2. Calculate Detailed Waste by Reason Code & SKU
     const approvedWos = db.write_offs.filter(w => w.status === 'approved');
@@ -8333,14 +8381,14 @@ async function startServer() {
         const existing = wasteMap.get(key);
         if (existing) {
           existing.quantity += l.qty;
-          existing.total_waste_cost += l.value_kes;
+          existing.total_waste_cost += l.value_cents;
         } else {
           wasteMap.set(key, {
             reason_code: l.reason,
             sku_id: l.sku_id,
             sku_name: skuName,
             quantity: l.qty,
-            total_waste_cost: l.value_kes
+            total_waste_cost: l.value_cents
           });
         }
       });
@@ -8360,15 +8408,15 @@ async function startServer() {
         sku_code: s.code,
         group_category: s.category_id,
         current_stock: stockQty,
-        unit_cost_kes: s.cost_price_kes,
-        total_valuation_kes: stockQty * s.cost_price_kes
+        unit_cost_cents: s.cost_price_cents,
+        total_valuation_cents: stockQty * s.cost_price_cents
       };
     });
 
     res.json({
       inventory_turnover: {
-        cogs_kes,
-        avg_inventory_value_kes,
+        cogs_cents,
+        avg_inventory_value_cents,
         turnover_ratio
       },
       waste_details,
@@ -9056,7 +9104,7 @@ async function startServer() {
         <header>
           <div class="title-area">
             <h1>\${CONFIG.PLATFORM_NAME}</h1>
-            <h2>Warehouse Management System — Loading Manifest</h2>
+            <h2>Warehouse Management System â€” Loading Manifest</h2>
           </div>
           <div style="text-align: right;">
             <p style="margin: 0; font-size: 18px; font-weight: bold;">\${manifest.manifest_number}</p>
@@ -9075,7 +9123,7 @@ async function startServer() {
             <div><strong>Driver:</strong> <span class="info-val">${manifest.driver_name || 'N/A'}</span></div>
             <div><strong>Vehicle:</strong> <span class="info-val">${manifest.vehicle_id || 'N/A'}</span></div>
             <div><strong>Dispatch Date/Time:</strong> <span class="info-val">${manifest.dispatched_at ? manifest.dispatched_at.slice(0, 16).replace('T', ' ') : 'N/A'}</span></div>
-            ${manifest.dispatch_temperature_celsius !== null ? `<div><strong>Dispatch Temp:</strong> <span class="info-val">${manifest.dispatch_temperature_celsius} °C</span></div>` : ''}
+            ${manifest.dispatch_temperature_celsius !== null ? `<div><strong>Dispatch Temp:</strong> <span class="info-val">${manifest.dispatch_temperature_celsius} Â°C</span></div>` : ''}
           </div>
         </div>
 
@@ -9154,7 +9202,7 @@ async function startServer() {
       disposition,
       actual_sku_id,
       disposition_notes,
-      markdown_price_kes,
+      markdown_price_cents,
       donate_recipient
     } = req.body;
 
@@ -9210,7 +9258,7 @@ async function startServer() {
 
       if (active_disposition === 'WRITE_OFF_AT_FP') {
         const woId = `WO-${Date.now()}`;
-        const cost = skuObj ? qty_rejected * skuObj.cost_price_kes : 0;
+        const cost = skuObj ? qty_rejected * skuObj.cost_price_cents : 0;
         
         db.write_offs.push({
           id: woId,
@@ -9220,7 +9268,7 @@ async function startServer() {
           approved_by: 'AUTO',
           created_at: new Date().toISOString(),
           approved_at: new Date().toISOString(),
-          total_value_kes: cost,
+          total_value_cents: cost,
           notes: `FPO rejection write-off: ${rejection_reason}`
         });
 
@@ -9231,7 +9279,7 @@ async function startServer() {
           batch_id: mLine.batch_id,
           qty: qty_rejected,
           reason: 'DAMAGED',
-          value_kes: cost,
+          value_cents: cost,
           location_id: transfer.to_location_id || 'RGL-Z1-01',
           notes: ''
         });
@@ -9290,7 +9338,7 @@ async function startServer() {
           reference_id: transfer.id,
           reference_type: 'transfer',
           user_id: db.currentUser.id,
-          notes: `Wrong product received vs FPO ${transfer.replenishment_order_number} — accepted at FP as ${actualSku.name}`
+          notes: `Wrong product received vs FPO ${transfer.replenishment_order_number} â€” accepted at FP as ${actualSku.name}`
         });
 
         actual_batch_id = newBatchId;
@@ -9319,8 +9367,8 @@ async function startServer() {
       }
 
       if (active_disposition === 'MARKDOWN_SALE') {
-        if (markdown_price_kes === undefined || markdown_price_kes === null) {
-          return res.status(422).json({ error: { code: 'MARKDOWN_PRICE_REQUIRED', message: 'markdown_price_kes is required' } });
+        if (markdown_price_cents === undefined || markdown_price_cents === null) {
+          return res.status(422).json({ error: { code: 'MARKDOWN_PRICE_REQUIRED', message: 'markdown_price_cents is required' } });
         }
       }
 
@@ -9341,7 +9389,7 @@ async function startServer() {
         actual_sku_name: actual_sku_name || null,
         actual_batch_id,
         disposition_notes: disposition_notes || null,
-        markdown_price_kes: markdown_price_kes ? parseFloat(markdown_price_kes) : null,
+        markdown_price_cents: markdown_price_cents ? parseFloat(markdown_price_cents) : null,
         donate_recipient: donate_recipient || null,
         write_off_id,
         recorded_by: db.currentUser.id,
@@ -9425,23 +9473,23 @@ async function startServer() {
       .forEach(r => r.status = 'cancelled');
 
     const rejections = transfer.rejection_lines || [];
-    const reasonGroups = new Map<string, { reason: RejectionReason; line_count: number; qty_rejected: number; value_kes: number }>();
+    const reasonGroups = new Map<string, { reason: RejectionReason; line_count: number; qty_rejected: number; value_cents: number }>();
     
     rejections.forEach(r => {
       const existing = reasonGroups.get(r.rejection_reason);
       const sku = db.skus.find(s => s.id === r.sku_id);
-      const value = r.qty_rejected * (sku?.cost_price_kes || 0);
+      const value = r.qty_rejected * (sku?.cost_price_cents || 0);
 
       if (existing) {
         existing.line_count += 1;
         existing.qty_rejected += r.qty_rejected;
-        existing.value_kes += value;
+        existing.value_cents += value;
       } else {
         reasonGroups.set(r.rejection_reason, {
           reason: r.rejection_reason,
           line_count: 1,
           qty_rejected: r.qty_rejected,
-          value_kes: value
+          value_cents: value
         });
       }
     });
@@ -9843,7 +9891,7 @@ async function startServer() {
     createNotification(
       'MARKDOWN_APPROVED',
       'Markdown Approved',
-      `High-value write-off markdown for slip '${approval.write_off_id}' approved. Value KES: ${approval.total_value_kes}`,
+      `High-value write-off markdown for slip '${approval.write_off_id}' approved. Value: ${formatMoney(approval.total_value_cents)}`,
       'info',
       { reference_id: approval.write_off_id, reference_type: 'write_off' }
     );
@@ -10006,13 +10054,13 @@ async function startServer() {
         disposition: null,
         restocked_to_location_id: null,
         write_off_id: null,
-        credit_value_kes: line.credit_value_kes,
+        credit_value_cents: line.credit_value_cents,
         inspected_by: null,
         inspected_at: null
       };
     });
 
-    const total_credit_value_kes = (lines || []).reduce((sum: number, l: any) => sum + (l.credit_value_kes || 0), 0);
+    const total_credit_value_cents = (lines || []).reduce((sum: number, l: any) => sum + (l.credit_value_cents || 0), 0);
 
     const customerReturn = {
       id: `RET-${Date.now()}`,
@@ -10035,7 +10083,7 @@ async function startServer() {
       received_by: null,
       received_at: null,
       receipt_temp_celsius: null,
-      total_credit_value_kes,
+      total_credit_value_cents,
       credit_issued: false,
       credit_issued_at: null,
       closed_at: null,
@@ -10215,7 +10263,7 @@ async function startServer() {
           approved_by: db.currentUser?.id,
           created_at: now,
           approved_at: now,
-          total_value_kes: retLine.credit_value_kes,
+          total_value_cents: retLine.credit_value_cents,
           notes: 'Auto write-off from customer return: ' + ret.return_number,
           lines: [{
             id: woId + '-L1',
@@ -10225,7 +10273,7 @@ async function startServer() {
             location_id: ret.received_at_warehouse_id,
             qty: retLine.qty_returned,
             reason: 'DAMAGED',
-            value_kes: retLine.credit_value_kes,
+            value_cents: retLine.credit_value_cents,
             notes: 'Customer return write-off'
           }]
         };
@@ -10314,7 +10362,7 @@ async function startServer() {
     createNotification(
       'WRITE_OFF_HIGH_VALUE',
       'Customer credit issued',
-      `Credit of KES ${(ret.total_credit_value_kes / 100).toFixed(2)} issued for return ${ret.return_number} to ${ret.customer_name}.`,
+      `Credit of ${formatMoney(ret.total_credit_value_cents)} issued for return ${ret.return_number} to ${ret.customer_name}.`,
       'info',
       { reference_id: ret.id, reference_type: 'customer_return' }
     );
@@ -10386,7 +10434,7 @@ async function startServer() {
     const {
       sku_id, supplier_id, supplier_sku_code, supplier_unit,
       units_per_supplier_unit, moq, lead_time_days,
-      price_kes, is_preferred, notes
+      price_cents, is_preferred, notes
     } = req.body;
 
     const sku = db.skus.find(s => s.id === sku_id);
@@ -10422,7 +10470,7 @@ async function startServer() {
       units_per_supplier_unit: parseInt(units_per_supplier_unit) || 1,
       moq: parseInt(moq) || 1,
       lead_time_days: parseInt(lead_time_days) || 1,
-      price_kes: parseInt(price_kes) || 0,
+      price_cents: parseInt(price_cents) || 0,
       is_preferred: prefVal,
       is_active: true,
       notes: notes || null,
@@ -10450,7 +10498,7 @@ async function startServer() {
 
     const fields = [
       'supplier_sku_code', 'supplier_unit', 'units_per_supplier_unit',
-      'moq', 'lead_time_days', 'price_kes', 'is_preferred', 'notes', 'is_active'
+      'moq', 'lead_time_days', 'price_cents', 'is_preferred', 'notes', 'is_active'
     ];
 
     fields.forEach(f => {
@@ -10465,7 +10513,7 @@ async function startServer() {
               }
             });
           }
-        } else if (['units_per_supplier_unit', 'moq', 'lead_time_days', 'price_kes'].includes(f)) {
+        } else if (['units_per_supplier_unit', 'moq', 'lead_time_days', 'price_cents'].includes(f)) {
           (card as any)[f] = parseInt(req.body[f]) || 0;
         } else if (f === 'is_active') {
           card.is_active = !!req.body.is_active;
@@ -10719,13 +10767,13 @@ async function startServer() {
       status: 'pending',
       lines,
       sellthrough_rate_pct: null,
-      total_transferred_kes: lines.reduce((sum, l) => {
+      total_transferred_cents: lines.reduce((sum, l) => {
         const sku = db.skus.find(s => s.id === l.sku_id);
-        return sum + (l.qty_transferred_in * (sku?.cost_price_kes || 0));
+        return sum + (l.qty_transferred_in * (sku?.cost_price_cents || 0));
       }, 0),
-      total_sold_kes: 0,
-      total_carried_forward_kes: 0,
-      total_written_off_kes: 0
+      total_sold_cents: 0,
+      total_carried_forward_cents: 0,
+      total_written_off_cents: 0
     };
 
     if (!db.cross_dock_eod_checks) db.cross_dock_eod_checks = [];
@@ -10767,7 +10815,7 @@ async function startServer() {
       line.carry_forward_reason = carry_forward_reason;
     } else if (resolution === 'WRITE_OFF') {
       const sku = db.skus.find(s => s.id === line.sku_id);
-      const valKes = line.qty_remaining * (sku?.cost_price_kes || 0);
+      const valKes = line.qty_remaining * (sku?.cost_price_cents || 0);
 
       const woId = 'WO-EOD-' + Date.now();
       const writeOff = {
@@ -10778,7 +10826,7 @@ async function startServer() {
         approved_by: db.currentUser?.id,
         created_at: new Date().toISOString(),
         approved_at: new Date().toISOString(),
-        total_value_kes: valKes,
+        total_value_cents: valKes,
         notes: 'EOD cross-dock write-off: ' + check.id,
         lines: [{
           id: woId + '-L1',
@@ -10788,7 +10836,7 @@ async function startServer() {
           location_id: line.location_id,
           qty: line.qty_remaining,
           reason: 'EXPIRED',
-          value_kes: valKes,
+          value_cents: valKes,
           notes: 'Cross-dock EOD write-off'
         }]
       };
@@ -10850,23 +10898,23 @@ async function startServer() {
       ? Math.round((totalSold / totalTransferred) * 100)
       : 0;
 
-    check.total_sold_kes = check.lines.reduce((s, l) => {
+    check.total_sold_cents = check.lines.reduce((s, l) => {
       const sku = db.skus.find(sk => sk.id === l.sku_id);
-      return s + (l.qty_sold * (sku?.cost_price_kes || 0));
+      return s + (l.qty_sold * (sku?.cost_price_cents || 0));
     }, 0);
 
-    check.total_carried_forward_kes = check.lines
+    check.total_carried_forward_cents = check.lines
       .filter(l => l.resolution === 'CARRY_FORWARD')
       .reduce((s, l) => {
         const sku = db.skus.find(sk => sk.id === l.sku_id);
-        return s + (l.qty_remaining * (sku?.cost_price_kes || 0));
+        return s + (l.qty_remaining * (sku?.cost_price_cents || 0));
       }, 0);
 
-    check.total_written_off_kes = check.lines
+    check.total_written_off_cents = check.lines
       .filter(l => l.resolution === 'WRITE_OFF')
       .reduce((s, l) => {
         const sku = db.skus.find(sk => sk.id === l.sku_id);
-        return s + (l.qty_remaining * (sku?.cost_price_kes || 0));
+        return s + (l.qty_remaining * (sku?.cost_price_cents || 0));
       }, 0);
 
     check.status = 'completed';
@@ -10876,7 +10924,7 @@ async function startServer() {
       createNotification(
         'OVERSTOCKED_SKU',
         'Low FP sellthrough rate',
-        `EOD check at ${check.warehouse_id}: sellthrough rate ${check.sellthrough_rate_pct}% — consider reducing tomorrow's replenishment transfer.`,
+        `EOD check at ${check.warehouse_id}: sellthrough rate ${check.sellthrough_rate_pct}% â€” consider reducing tomorrow's replenishment transfer.`,
         'warning',
         { reference_id: check.id, reference_type: 'eod_check', warehouse_id: check.warehouse_id }
       );
@@ -10909,10 +10957,10 @@ async function startServer() {
       check_date: c.check_date,
       warehouse_id: c.warehouse_id,
       sellthrough_rate_pct: c.sellthrough_rate_pct,
-      total_transferred_kes: c.total_transferred_kes,
-      total_sold_kes: c.total_sold_kes,
-      total_carried_forward_kes: c.total_carried_forward_kes,
-      total_written_off_kes: c.total_written_off_kes
+      total_transferred_cents: c.total_transferred_cents,
+      total_sold_cents: c.total_sold_cents,
+      total_carried_forward_cents: c.total_carried_forward_cents,
+      total_written_off_cents: c.total_written_off_cents
     }));
 
     mapped.sort((a, b) => new Date(b.check_date).getTime() - new Date(a.check_date).getTime());
@@ -11052,7 +11100,7 @@ async function startServer() {
       notification_thresholds: {
         expiry_alert_days: CONFIG.EXPIRY_ALERT_DAYS_DEFAULT,
         delivery_late_hours: CONFIG.DELIVERY_LATE_HOURS,
-        write_off_high_value_kes: CONFIG.WRITE_OFF_HIGH_VALUE_KES
+        write_off_high_value_cents: CONFIG.WRITE_OFF_HIGH_VALUE_cents
       }
     });
   });
@@ -11120,7 +11168,7 @@ async function startServer() {
   });
 
   // --- COMPATIBILITY SHIM MIDDLEWARE ---
-  // Legacy /api/* → /api/v1/* redirect
+  // Legacy /api/* â†’ /api/v1/* redirect
   app.use('/api', (req: any, res: any, next: any) => {
     if (!req.path.startsWith('/v1/')) {
       req.url = '/v1' + req.url;
@@ -11201,3 +11249,4 @@ function nextManifestNumber(type: 'delivery' | 'replenishment'): string {
 }
 
 startServer();
+

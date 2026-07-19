@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { PurchaseOrder, SKU, Location, GoodsReceipt as GRType, User } from '../types';
 import { 
   ClipboardCheck, 
@@ -277,7 +277,7 @@ export default function GoodsReceipt({ locations, skus, currentUser, triggerRefr
   const [isCreatingPo, setIsCreatingPo] = useState(false);
   const [poSupplier, setPoSupplier] = useState('S-KENCHIC');
   const [poWarehouse, setPoWarehouse] = useState('RGN');
-  const [poLines, setPoLines] = useState<any[]>([{ sku_id: 'SKU-MILK', qty_ordered: 50, unit_cost_kes: 7000 }]);
+  const [poLines, setPoLines] = useState<any[]>([{ sku_id: 'SKU-MILK', qty_ordered: 50, unit_cost_cents: 7000 }]);
 
   // Errors state
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -461,7 +461,7 @@ export default function GoodsReceipt({ locations, skus, currentUser, triggerRefr
         setSuccessMessage(`Purchase Order ${data.data.id} dispatched to supplier successfully!`);
         setIsCreatingPo(false);
         fetchPOs();
-        setPoLines([{ sku_id: 'SKU-MILK', qty_ordered: 50, unit_cost_kes: 7000 }]);
+        setPoLines([{ sku_id: 'SKU-MILK', qty_ordered: 50, unit_cost_cents: 7000 }]);
       } else {
         setErrorMessage(data.error?.message || 'Error creating PO');
       }
@@ -471,7 +471,7 @@ export default function GoodsReceipt({ locations, skus, currentUser, triggerRefr
   };
 
   const addPoLine = () => {
-    setPoLines([...poLines, { sku_id: 'SKU-MILK', qty_ordered: 50, unit_cost_kes: 7000 }]);
+    setPoLines([...poLines, { sku_id: 'SKU-MILK', qty_ordered: 50, unit_cost_cents: 7000 }]);
   };
 
   const removePoLine = (idx: number) => {
@@ -597,7 +597,7 @@ export default function GoodsReceipt({ locations, skus, currentUser, triggerRefr
                 onClick={() => setSearchQuery('')}
                 className="absolute right-2.5 top-2.5 text-slate-450 hover:text-slate-600 font-bold"
               >
-                ×
+                Ã—
               </button>
             )}
           </div>
@@ -1214,7 +1214,7 @@ export default function GoodsReceipt({ locations, skus, currentUser, triggerRefr
                 onClick={() => setIsPrintPreviewOpen(false)}
                 className="text-slate-400 hover:text-white font-bold text-sm p-1 cursor-pointer"
               >
-                ✕
+                âœ•
               </button>
             </div>
 
@@ -1418,3 +1418,4 @@ export default function GoodsReceipt({ locations, skus, currentUser, triggerRefr
     </div>
   );
 }
+

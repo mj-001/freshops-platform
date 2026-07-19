@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { Warehouse, SKU } from '../types';
+import { useCurrency } from '../hooks/useCurrency';
 import { 
   Building2, 
   MapPin, 
@@ -81,6 +82,7 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate }: DashboardProps) {
+  const { currencyCode, format: formatMoney } = useCurrency();
   const [activeWh, setActiveWh] = useState<string>('RGN');
   const [stock, setStock] = useState<any[]>([]);
   const [reorderAlerts, setReorderAlerts] = useState<any[]>([]);
@@ -138,13 +140,13 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
     csvContent += "1. INVENTORY TURNOVER METRICS\r\n";
     csvContent += "Metric,Value,Explanation\r\n";
     csvContent += `Inventory Turnover Ratio,${inventory_turnover.turnover_ratio}x,Annualized depletion frequency\r\n`;
-    csvContent += `Cost of Goods Sold (COGS) KES,${inventory_turnover.cogs_kes},Total cost of picked/dispatched goods\r\n`;
-    csvContent += `Average Inventory Value KES,${inventory_turnover.avg_inventory_value_kes},Current holding cost baseline\r\n`;
+    csvContent += `Cost of Goods Sold (COGS) KES,${inventory_turnover.cogs_cents},Total cost of picked/dispatched goods\r\n`;
+    csvContent += `Average Inventory Value KES,${inventory_turnover.avg_inventory_value_cents},Current holding cost baseline\r\n`;
     csvContent += "\r\n";
     
     // Part 2: Waste by Reason Code & SKU
     csvContent += "2. WASTE BY REASON CODE & SKU\r\n";
-    csvContent += "Reason Code,SKU ID,SKU Name,Quantity,Total Waste Cost (KES)\r\n";
+    csvContent += `Reason Code,SKU ID,SKU Name,Quantity,Total Waste Cost (${currencyCode})\r\n`;
     
     waste_details.forEach((item: any) => {
       const escapedName = item.sku_name.replace(/"/g, '""');
@@ -156,11 +158,11 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
     
     // Part 3: Live Valuation Snapshot
     csvContent += "3. CURRENT LIVE INVENTORY & VALUATION SNAPSHOT\r\n";
-    csvContent += "SKU ID,SKU Code,SKU Name,Category,Current Stock On Hand,Unit Cost (KES),Total Valuation (KES)\r\n";
+    csvContent += `SKU ID,SKU Code,SKU Name,Category,Current Stock On Hand,Unit Cost (${currencyCode}),Total Valuation (${currencyCode})\r\n`;
     
     inventory_items.forEach((item: any) => {
       const escapedName = item.sku_name.replace(/"/g, '""');
-      csvContent += `${item.sku_id},${item.sku_code},"${escapedName}",${item.group_category},${item.current_stock},${item.unit_cost_kes},${item.total_valuation_kes}\r\n`;
+      csvContent += `${item.sku_id},${item.sku_code},"${escapedName}",${item.group_category},${item.current_stock},${item.unit_cost_cents},${item.total_valuation_cents}\r\n`;
     });
 
     const encodedUri = encodeURI(csvContent);
@@ -187,13 +189,13 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
     rows.push(['1. INVENTORY TURNOVER METRICS']);
     rows.push(['Metric', 'Value', 'Explanation']);
     rows.push(['Inventory Turnover Ratio', `${inventory_turnover.turnover_ratio}x`, 'Annualized depletion frequency']);
-    rows.push(['Cost of Goods Sold (COGS) KES', inventory_turnover.cogs_kes, 'Total cost of picked/dispatched goods']);
-    rows.push(['Average Inventory Value KES', inventory_turnover.avg_inventory_value_kes, 'Current holding cost baseline']);
+    rows.push(['Cost of Goods Sold (COGS) KES', inventory_turnover.cogs_cents, 'Total cost of picked/dispatched goods']);
+    rows.push(['Average Inventory Value KES', inventory_turnover.avg_inventory_value_cents, 'Current holding cost baseline']);
     rows.push([]);
 
     // Part 2: Waste by Reason Code & SKU
     rows.push(['2. WASTE BY REASON CODE & SKU']);
-    rows.push(['Reason Code', 'SKU ID', 'SKU Name', 'Quantity', 'Total Waste Cost (KES)']);
+    rows.push(['Reason Code', 'SKU ID', 'SKU Name', 'Quantity', `Total Waste Cost (${currencyCode})`]);
     waste_details.forEach((item: any) => {
       rows.push([
         item.reason_code,
@@ -208,7 +210,7 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
 
     // Part 3: Live Valuation Snapshot
     rows.push(['3. CURRENT LIVE INVENTORY & VALUATION SNAPSHOT']);
-    rows.push(['SKU ID', 'SKU Code', 'SKU Name', 'Category', 'Current Stock On Hand', 'Unit Cost (KES)', 'Total Valuation (KES)']);
+    rows.push(['SKU ID', 'SKU Code', 'SKU Name', 'Category', 'Current Stock On Hand', `Unit Cost (${currencyCode})`, `Total Valuation (${currencyCode})`]);
     inventory_items.forEach((item: any) => {
       rows.push([
         item.sku_id,
@@ -216,8 +218,8 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
         item.sku_name,
         item.group_category,
         item.current_stock,
-        item.unit_cost_kes,
-        item.total_valuation_kes
+        item.unit_cost_cents,
+        item.total_valuation_cents
       ]);
     });
 
@@ -337,7 +339,7 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
       // Let's compute actual waste values
       let writeOffValueSim = 10000;
       if (wData.data && wData.data.length > 0) {
-        writeOffValueSim = wData.data.reduce((acc: number, item: any) => acc + item.total_value_kes, 0);
+        writeOffValueSim = wData.data.reduce((acc: number, item: any) => acc + item.total_value_cents, 0);
       }
 
       setKpis({
@@ -422,13 +424,13 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
                 <p className="text-xs text-rose-800 mt-0.5">
                   The WMS sensors detected out-of-bounds temperature readings inside:
                   <span className="font-semibold text-rose-950 ml-1">
-                    {activeBreaches.map(b => `${b.name} (${b.current_temp_celsius?.toFixed(1)}°C)`).join(', ')}
+                    {activeBreaches.map(b => `${b.name} (${b.current_temp_celsius?.toFixed(1)}Â°C)`).join(', ')}
                   </span>
                 </p>
               </div>
             </div>
             <div className="text-[10px] font-mono font-bold text-rose-700 bg-rose-100 px-3 py-1.5 rounded-md border border-rose-200 uppercase tracking-widest shrink-0">
-              🛑 OUT_OF_COMPLIANCE
+              ðŸ›‘ OUT_OF_COMPLIANCE
             </div>
           </div>
         );
@@ -474,13 +476,13 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
                     <p className="text-xs font-bold text-slate-900 truncate leading-tight">{item.sku_name}</p>
                     <div className="flex items-center space-x-1.5 text-[10px] text-slate-500 font-mono mt-0.5">
                       <span className="bg-slate-100 rounded px-1">{item.batch_id}</span>
-                      <span>•</span>
+                      <span>â€¢</span>
                       <span>Loc: <b className="text-slate-800">{item.location_id.replace('L-', '')}</b></span>
                     </div>
                     <div className="mt-1 flex items-center justify-between">
                       <span className="text-xs font-black text-slate-900 font-mono">{displayQty(item.qty_available, targetSku)}</span>
                       <span className="text-[10px] font-bold text-amber-700 bg-amber-100/60 border border-amber-200 rounded px-2 py-0.5 animate-pulse">
-                        ⚠️ {rText}
+                        âš ï¸ {rText}
                       </span>
                     </div>
                   </div>
@@ -501,7 +503,7 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
           </div>
           <div className="flex items-baseline space-x-2">
             <span className="text-2xl font-bold text-slate-900">{kpis.wastePct}%</span>
-            <span className="text-xs text-rose-600 font-medium">({(kpis.wasteValue / 100).toLocaleString()} KES)</span>
+            <span className="text-xs text-rose-600 font-medium">({formatMoney(kpis.wasteValue)})</span>
           </div>
           <p className="text-[10px] text-slate-400">Approved write-offs / total D2C revenue</p>
         </div>
@@ -622,7 +624,7 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
               <div className="p-3.5 bg-slate-50/70 border border-slate-150 rounded-xl space-y-1">
                 <span className="text-[10px] uppercase font-black text-slate-450 tracking-wider">Cost of Goods Sold (COGS)</span>
                 <p className="text-xl font-bold text-slate-900 font-mono">
-                  {(comprehensiveReport?.inventory_turnover?.cogs_kes || 0).toLocaleString()} <span className="text-xs font-normal text-slate-500">KES</span>
+                  {(comprehensiveReport?.inventory_turnover?.cogs_cents || 0).toLocaleString()} <span className="text-xs font-normal text-slate-500">KES</span>
                 </p>
                 <span className="text-[9px] text-slate-400 font-medium block">Total value of successfully shipped goods</span>
               </div>
@@ -630,7 +632,7 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
               <div className="p-3.5 bg-slate-50/70 border border-slate-150 rounded-xl space-y-1">
                 <span className="text-[10px] uppercase font-black text-slate-450 tracking-wider">Average Inventory Value</span>
                 <p className="text-xl font-bold text-slate-900 font-mono">
-                  {(comprehensiveReport?.inventory_turnover?.avg_inventory_value_kes || 0).toLocaleString()} <span className="text-xs font-normal text-slate-500">KES</span>
+                  {(comprehensiveReport?.inventory_turnover?.avg_inventory_value_cents || 0).toLocaleString()} <span className="text-xs font-normal text-slate-500">KES</span>
                 </p>
                 <span className="text-[9px] text-slate-400 font-medium block">Live baseline stock value on hand</span>
               </div>
@@ -638,7 +640,7 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
               <div className="p-3.5 bg-slate-50/70 border border-slate-150 rounded-xl space-y-1">
                 <span className="text-[10px] uppercase font-black text-slate-450 tracking-wider">Total Write-Off Waste</span>
                 <p className="text-xl font-bold text-rose-750 font-mono">
-                  {(comprehensiveReport?.total_waste_cost_sum || 0).toLocaleString()} <span className="text-xs font-normal text-slate-500">KES</span>
+                  {formatMoney(comprehensiveReport?.total_waste_cost_sum || 0)}
                 </p>
                 <span className="text-[9px] text-rose-600 font-bold uppercase tracking-wider block">Total waste by cost</span>
               </div>
@@ -691,7 +693,7 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
                             {item.quantity} units
                           </td>
                           <td className="p-2.5 text-right font-mono font-bold text-slate-900">
-                            {item.total_waste_cost.toLocaleString()} KES
+                            {formatMoney(item.total_waste_cost)}
                           </td>
                         </tr>
                       ))}
@@ -936,7 +938,7 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
                 }`}>
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-cyan-900 tracking-wide uppercase">Frozen Zone</span>
-                    <span className="text-[10px] font-bold bg-cyan-200 text-cyan-800 px-1.5 py-0.5 rounded-full">≤ -18°C</span>
+                    <span className="text-[10px] font-bold bg-cyan-200 text-cyan-800 px-1.5 py-0.5 rounded-full">â‰¤ -18Â°C</span>
                   </div>
                   
                   {zoneData ? (
@@ -946,7 +948,7 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
                         Sensor:
                       </span>
                       <span className={`font-mono font-bold ${isBreached ? 'text-rose-600' : 'text-slate-700'}`}>
-                        {zoneData.current_temp_celsius?.toFixed(1)}°C
+                        {zoneData.current_temp_celsius?.toFixed(1)}Â°C
                       </span>
                     </div>
                   ) : (
@@ -969,7 +971,7 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
                   </div>
                   
                   {isBreached && (
-                    <p className="text-[9px] text-rose-600 font-bold uppercase animate-pulse">⚠️ FREEZER OVERHEATING</p>
+                    <p className="text-[9px] text-rose-600 font-bold uppercase animate-pulse">âš ï¸ FREEZER OVERHEATING</p>
                   )}
                 </div>
               );
@@ -987,7 +989,7 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
                 }`}>
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-blue-900 tracking-wide uppercase">Chilled Zone</span>
-                    <span className="text-[10px] font-bold bg-blue-200 text-blue-800 px-1.5 py-0.5 rounded-full">0°C to 4°C</span>
+                    <span className="text-[10px] font-bold bg-blue-200 text-blue-800 px-1.5 py-0.5 rounded-full">0Â°C to 4Â°C</span>
                   </div>
 
                   {zoneData ? (
@@ -997,7 +999,7 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
                         Sensor:
                       </span>
                       <span className={`font-mono font-bold ${isBreached ? 'text-rose-600' : 'text-slate-700'}`}>
-                        {zoneData.current_temp_celsius?.toFixed(1)}°C
+                        {zoneData.current_temp_celsius?.toFixed(1)}Â°C
                       </span>
                     </div>
                   ) : (
@@ -1011,7 +1013,7 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
                         {stock.find(s => s.location_id === 'L-RGN-CHL-01' || s.location_id === 'L-RGL-CHL-01') ? (
                           <span className="space-y-1 block">
                             {stock.filter(s => s.location_id === 'L-RGN-CHL-01' || s.location_id === 'L-RGL-CHL-01').map((item, id) => (
-                              <div key={id} className="text-xs">• {item.sku_name.split(' ')[0]} ({item.qty_available} units)</div>
+                              <div key={id} className="text-xs">â€¢ {item.sku_name.split(' ')[0]} ({item.qty_available} units)</div>
                             ))}
                           </span>
                         ) : (
@@ -1035,7 +1037,7 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
                   </div>
 
                   {isBreached && (
-                    <p className="text-[9px] text-rose-600 font-bold uppercase animate-pulse">⚠️ COLD ROOM TEMPERATURE SPIKE</p>
+                    <p className="text-[9px] text-rose-600 font-bold uppercase animate-pulse">âš ï¸ COLD ROOM TEMPERATURE SPIKE</p>
                   )}
                 </div>
               );
@@ -1053,7 +1055,7 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
                 }`}>
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-teal-900 tracking-wide uppercase">Cool Zone</span>
-                    <span className="text-[10px] font-bold bg-teal-200 text-teal-800 px-1.5 py-0.5 rounded-full">8°C to 12°C</span>
+                    <span className="text-[10px] font-bold bg-teal-200 text-teal-800 px-1.5 py-0.5 rounded-full">8Â°C to 12Â°C</span>
                   </div>
 
                   {zoneData ? (
@@ -1063,7 +1065,7 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
                         Sensor:
                       </span>
                       <span className={`font-mono font-bold ${isBreached ? 'text-rose-600' : 'text-slate-700'}`}>
-                        {zoneData.current_temp_celsius?.toFixed(1)}°C
+                        {zoneData.current_temp_celsius?.toFixed(1)}Â°C
                       </span>
                     </div>
                   ) : (
@@ -1084,7 +1086,7 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
                   </div>
 
                   {isBreached && (
-                    <p className="text-[9px] text-rose-600 font-bold uppercase animate-pulse">⚠️ COOL ROOM DEFECT</p>
+                    <p className="text-[9px] text-rose-600 font-bold uppercase animate-pulse">âš ï¸ COOL ROOM DEFECT</p>
                   )}
                 </div>
               );
@@ -1102,7 +1104,7 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
                 }`}>
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-amber-900 tracking-wide uppercase">Ambient Zone</span>
-                    <span className="text-[10px] font-bold bg-amber-200 text-amber-800 px-1.5 py-0.5 rounded-full">15°C to 25°C</span>
+                    <span className="text-[10px] font-bold bg-amber-200 text-amber-800 px-1.5 py-0.5 rounded-full">15Â°C to 25Â°C</span>
                   </div>
 
                   {zoneData ? (
@@ -1112,7 +1114,7 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
                         Sensor:
                       </span>
                       <span className={`font-mono font-bold ${isBreached ? 'text-rose-600' : 'text-slate-700'}`}>
-                        {zoneData.current_temp_celsius?.toFixed(1)}°C
+                        {zoneData.current_temp_celsius?.toFixed(1)}Â°C
                       </span>
                     </div>
                   ) : (
@@ -1141,7 +1143,7 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
                   </div>
 
                   {isBreached && (
-                    <p className="text-[9px] text-rose-600 font-bold uppercase animate-pulse">⚠️ DRY AREA HEATWAVE</p>
+                    <p className="text-[9px] text-rose-600 font-bold uppercase animate-pulse">âš ï¸ DRY AREA HEATWAVE</p>
                   )}
                 </div>
               );
@@ -1174,12 +1176,12 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
                       <div className="flex justify-between items-start">
                         <div>
                           <p className="font-bold text-slate-950 leading-none">{zone.name}</p>
-                          <p className="text-[9px] text-slate-400 font-mono mt-1">Normal Limits: <span className="text-slate-600 font-bold">{zone.min_temp_celsius}°C</span> to <span className="text-slate-600 font-bold">{zone.max_temp_celsius}°C</span></p>
+                          <p className="text-[9px] text-slate-400 font-mono mt-1">Normal Limits: <span className="text-slate-600 font-bold">{zone.min_temp_celsius}Â°C</span> to <span className="text-slate-600 font-bold">{zone.max_temp_celsius}Â°C</span></p>
                         </div>
                         <span className={`px-2 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase tracking-wider ${
                           isBr ? 'bg-rose-100 text-rose-700 border border-rose-200 animate-bounce' : 'bg-slate-100 border border-slate-200 text-slate-600'
                         }`}>
-                          {isBr ? '⚠️ OUT OF RANGE' : '✓ COMPLIANT'}
+                          {isBr ? 'âš ï¸ OUT OF RANGE' : 'âœ“ COMPLIANT'}
                         </span>
                       </div>
                       
@@ -1187,7 +1189,7 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
                         <div className="flex items-center space-x-1.5 text-xs text-slate-500">
                           <span className="font-bold text-[10px] uppercase font-sans text-slate-400">Live Reading:</span>
                           <span className={`font-mono font-extrabold text-[13px] ${isBr ? 'text-rose-600' : 'text-slate-800'}`}>
-                            {zone.current_temp_celsius !== undefined ? zone.current_temp_celsius.toFixed(1) : '--'}°C
+                            {zone.current_temp_celsius !== undefined ? zone.current_temp_celsius.toFixed(1) : '--'}Â°C
                           </span>
                         </div>
                         
@@ -1286,7 +1288,7 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
               <div className="space-y-1">
                 {reorderAlerts.slice(0, 2).map((alert, idx) => (
                   <p key={idx} className="text-[10px] leading-relaxed text-amber-800">
-                    • <b>{alert.sku_name}</b> is below reorder level. Stock: <b>{alert.current_stock}</b> / Limit: <b>{alert.reorder_level}</b> (Short: <span className="font-bold">{alert.shortage}</span>)
+                    â€¢ <b>{alert.sku_name}</b> is below reorder level. Stock: <b>{alert.current_stock}</b> / Limit: <b>{alert.reorder_level}</b> (Short: <span className="font-bold">{alert.shortage}</span>)
                   </p>
                 ))}
               </div>
@@ -1297,3 +1299,4 @@ export default function Dashboard({ warehouses, skus, triggerRefresh, onNavigate
     </div>
   );
 }
+

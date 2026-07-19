@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { Location, SKU, User } from '../types';
+import { useCurrency } from '../hooks/useCurrency';
 import { 
   ClipboardCheck, 
   Trash2, 
@@ -59,6 +60,7 @@ interface AuditsProps {
 }
 
 export default function Audits({ locations, skus, currentUser, triggerRefresh, refreshFlag, triggerToast }: AuditsProps) {
+  const { currencyCode } = useCurrency();
   const [cycleCounts, setCycleCounts] = useState<any[]>([]);
   const [selectedCount, setSelectedCount] = useState<any | null>(null);
   
@@ -77,7 +79,7 @@ export default function Audits({ locations, skus, currentUser, triggerRefresh, r
   // Form Creation Write Off
   const [isCreatingWriteOff, setIsCreatingWriteOff] = useState(false);
   const [woWarehouse, setWoWarehouse] = useState('RGN');
-  const [woLines, setWoLines] = useState<any[]>([{ sku_id: 'SKU-MILK', batch_id: 'B-MILK-EXP-EARLY', location_id: 'L-RGN-CHL-01', qty: 2, reason: 'EXPIRED', value_kes: 14000 }]);
+  const [woLines, setWoLines] = useState<any[]>([{ sku_id: 'SKU-MILK', batch_id: 'B-MILK-EXP-EARLY', location_id: 'L-RGN-CHL-01', qty: 2, reason: 'EXPIRED', value_cents: 14000 }]);
   const [woNotes, setWoNotes] = useState('');
 
   // Active inventory lookup for write-off select
@@ -322,7 +324,7 @@ export default function Audits({ locations, skus, currentUser, triggerRefresh, r
         location_id: l.location_id,
         qty: parseFloat(l.qty),
         reason: l.reason,
-        value_kes: parseFloat(l.value_kes)
+        value_cents: parseFloat(l.value_cents)
       }))
     };
 
@@ -338,7 +340,7 @@ export default function Audits({ locations, skus, currentUser, triggerRefresh, r
         setSuccessMessage(`Write-off queued offline successfully. It will sync automatically when connection is restored.`);
         setIsCreatingWriteOff(false);
         setWoNotes('');
-        setWoLines([{ sku_id: 'SKU-MILK', batch_id: 'B-MILK-EXP-EARLY', location_id: 'L-RGN-CHL-01', qty: 2, reason: 'EXPIRED', value_kes: 14000 }]);
+        setWoLines([{ sku_id: 'SKU-MILK', batch_id: 'B-MILK-EXP-EARLY', location_id: 'L-RGN-CHL-01', qty: 2, reason: 'EXPIRED', value_cents: 14000 }]);
 
         const fakeVal = {
           id: 'PENDING-SYNC-' + Math.random().toString(36).substring(2, 6).toUpperCase(),
@@ -355,7 +357,7 @@ export default function Audits({ locations, skus, currentUser, triggerRefresh, r
         setSuccessMessage(`Write-off slip ${result.data.id} created successfully with status PENDING_APPROVAL.`);
         setIsCreatingWriteOff(false);
         setWoNotes('');
-        setWoLines([{ sku_id: 'SKU-MILK', batch_id: 'B-MILK-EXP-EARLY', location_id: 'L-RGN-CHL-01', qty: 2, reason: 'EXPIRED', value_kes: 14000 }]);
+        setWoLines([{ sku_id: 'SKU-MILK', batch_id: 'B-MILK-EXP-EARLY', location_id: 'L-RGN-CHL-01', qty: 2, reason: 'EXPIRED', value_cents: 14000 }]);
         fetchWriteOffs();
         handleSelectWriteOff(result.data);
       } else {
@@ -424,7 +426,7 @@ export default function Audits({ locations, skus, currentUser, triggerRefresh, r
           {/* Compliance PDF Action Trigger */}
           <button
             type="button"
-            onClick={() => exportCumulativeAuditLedger(cycleCounts, writeOffs)}
+            onClick={() => exportCumulativeAuditLedger(cycleCounts, writeOffs, currencyCode)}
             className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold tracking-tight transition-all shadow-xs flex items-center justify-center space-x-2 border border-slate-700/50 cursor-pointer"
           >
             <Download className="h-4 w-4 animate-bounce shrink-0" />
@@ -516,7 +518,7 @@ export default function Audits({ locations, skus, currentUser, triggerRefresh, r
                 {isWallToWall ? (
                   <div className="bg-white border border-teal-100 p-2.5 rounded-xl text-[10px] text-slate-600 animate-fadeIn space-y-1">
                     <p className="font-extrabold text-teal-800 flex items-center space-x-1">
-                      <span>✓ Wall-to-Wall Comprehensive Mode Active</span>
+                      <span>âœ“ Wall-to-Wall Comprehensive Mode Active</span>
                     </p>
                     <p className="leading-normal text-slate-500">
                       Systematically lists every possible product (including active <b>0-balance lines</b> in this section) to verify vacant physical bins and detect unrecorded stock. Perfect for full compliance.
@@ -633,7 +635,7 @@ export default function Audits({ locations, skus, currentUser, triggerRefresh, r
                             copy[0].location_id = matching.location_id;
                             // Calculate standard write cost as placeholder
                             const matchingSku = skus.find(s => s.id === matching.sku_id);
-                            copy[0].value_kes = (matchingSku?.cost_price_kes || 50) * copy[0].qty;
+                            copy[0].value_cents = (matchingSku?.cost_price_cents || 50) * copy[0].qty;
                             setWoLines(copy);
                           }
                         }}
@@ -661,7 +663,7 @@ export default function Audits({ locations, skus, currentUser, triggerRefresh, r
                                 const valBase = countToBase(val, woRemainderUnits, skuObj);
                                 const copy = [...woLines];
                                 copy[0].qty = valBase;
-                                copy[0].value_kes = (skuObj?.cost_price_kes || 50) * valBase;
+                                copy[0].value_cents = (skuObj?.cost_price_cents || 50) * valBase;
                                 setWoLines(copy);
                               }}
                               className="w-1/2 border border-slate-150 rounded text-center p-1 font-bold text-xs"
@@ -677,7 +679,7 @@ export default function Audits({ locations, skus, currentUser, triggerRefresh, r
                                 const valBase = countToBase(woFullUnits, val, skuObj);
                                 const copy = [...woLines];
                                 copy[0].qty = valBase;
-                                copy[0].value_kes = (skuObj?.cost_price_kes || 50) * valBase;
+                                copy[0].value_cents = (skuObj?.cost_price_cents || 50) * valBase;
                                 setWoLines(copy);
                               }}
                               className="w-1/2 border border-slate-150 rounded text-center p-1 font-bold text-xs"
@@ -707,13 +709,13 @@ export default function Audits({ locations, skus, currentUser, triggerRefresh, r
                           </select>
                         </div>
                         <div>
-                          <label className="block text-slate-400">Est KES Value</label>
+                          <label className="block text-slate-400">Est {currencyCode} Value</label>
                           <input
                             type="number"
-                            value={woLines[0].value_kes / 100}
+                            value={woLines[0].value_cents / 100}
                             onChange={(e) => {
                               const copy = [...woLines];
-                              copy[0].value_kes = (parseFloat(e.target.value) || 0) * 100;
+                              copy[0].value_cents = (parseFloat(e.target.value) || 0) * 100;
                               setWoLines(copy);
                             }}
                             className="w-full border border-slate-150 rounded text-center p-1 font-bold text-rose-700 bg-rose-50/20"
@@ -749,7 +751,7 @@ export default function Audits({ locations, skus, currentUser, triggerRefresh, r
                   >
                     <div>
                       <p className="font-bold font-mono tracking-wide">{wo.id}</p>
-                      <p className={`text-[9px] ${selectedWriteOff?.id === wo.id ? 'text-slate-300' : 'text-slate-400'}`}>Depot: {wo.warehouse_id} | Value: {(wo.total_value_kes/100).toLocaleString()} KES</p>
+                      <p className={`text-[9px] ${selectedWriteOff?.id === wo.id ? 'text-slate-300' : 'text-slate-400'}`}>Depot: {wo.warehouse_id} | Value: {(wo.total_value_cents/100).toLocaleString()} KES</p>
                     </div>
                     <div className="flex items-center space-x-1.5 shrink-0">
                       <span className="text-[9px] font-bold uppercase">{wo.status}</span>
@@ -757,7 +759,7 @@ export default function Audits({ locations, skus, currentUser, triggerRefresh, r
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          exportWriteOffVoucher(wo);
+                          exportWriteOffVoucher(wo, currencyCode);
                         }}
                         className={`p-1 rounded border transition-all cursor-pointer ${
                           selectedWriteOff?.id === wo.id
@@ -787,7 +789,7 @@ export default function Audits({ locations, skus, currentUser, triggerRefresh, r
                     <h2 className="text-sm font-bold text-slate-900">Cycle Counting Sheet ({selectedCount.id})</h2>
                     <button
                       type="button"
-                      onClick={() => exportCycleCountVoucher(selectedCount)}
+                      onClick={() => exportCycleCountVoucher(selectedCount, currencyCode)}
                       className="p-1 px-1.5 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-md transition-all text-[11px] font-bold flex items-center space-x-1 border border-indigo-200 bg-white shadow-xs cursor-pointer"
                       title="Save as PDF"
                     >
@@ -818,7 +820,7 @@ export default function Audits({ locations, skus, currentUser, triggerRefresh, r
               </div>
 
               <p className="text-xxs text-slate-400 italic">
-                * Operational rule: Standard system stock is snapshotted upon sheet creation. Counting discrepancy above ±5% or ±1 unit automatically flags variance blocks (BR-040).
+                * Operational rule: Standard system stock is snapshotted upon sheet creation. Counting discrepancy above Â±5% or Â±1 unit automatically flags variance blocks (BR-040).
               </p>
 
               <div className="space-y-2 max-h-96 overflow-y-auto">
@@ -939,7 +941,7 @@ export default function Audits({ locations, skus, currentUser, triggerRefresh, r
                       <div className="space-y-0.5 text-amber-900">
                         <p className="font-bold">Variance triggers approved verification!</p>
                         <p className="text-[11px] leading-relaxed">
-                          Counting sheets has discrepancy values exceeding ±5% or ±1 unit threshold. Requires Ops Manager override to commit adjustments.
+                          Counting sheets has discrepancy values exceeding Â±5% or Â±1 unit threshold. Requires Ops Manager override to commit adjustments.
                         </p>
                       </div>
                     </div>
@@ -969,7 +971,7 @@ export default function Audits({ locations, skus, currentUser, triggerRefresh, r
                     <h2 className="text-sm font-bold text-slate-900">Write-Off Slip details ({selectedWriteOff.id})</h2>
                     <button
                       type="button"
-                      onClick={() => exportWriteOffVoucher(selectedWriteOff)}
+                      onClick={() => exportWriteOffVoucher(selectedWriteOff, currencyCode)}
                       className="p-1 px-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-md transition-all text-[11px] font-bold flex items-center space-x-1 border border-rose-200 bg-white shadow-xs cursor-pointer"
                       title="Save as PDF"
                     >
@@ -980,8 +982,8 @@ export default function Audits({ locations, skus, currentUser, triggerRefresh, r
                   <p className="text-xs text-slate-500">Target site: <b>{selectedWriteOff.warehouse_id}</b></p>
                 </div>
                 <div className="text-right">
-                  <span className="text-xs font-bold text-slate-500 block">Total Loss Value KES</span>
-                  <span className="text-base font-bold text-rose-700 font-mono">{(selectedWriteOff.total_value_kes / 100).toLocaleString() || '0'} KES</span>
+                  <span className="text-xs font-bold text-slate-500 block">Total Loss Value {currencyCode}</span>
+                  <span className="text-base font-bold text-rose-700 font-mono">{(selectedWriteOff.total_value_cents / 100).toLocaleString() || '0'} KES</span>
                 </div>
               </div>
 
@@ -1059,3 +1061,4 @@ export default function Audits({ locations, skus, currentUser, triggerRefresh, r
     </div>
   );
 }
+

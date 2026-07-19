@@ -1,5 +1,6 @@
-// src/components/BulkSkuUploadModal.tsx
+﻿// src/components/BulkSkuUploadModal.tsx
 import React, { useState } from 'react';
+import { useCurrency } from '../hooks/useCurrency';
 import { motion } from 'motion/react';
 import { 
   X, 
@@ -32,12 +33,12 @@ const STRICT_COLUMNS = [
   { key: 'supplier',          label: 'supplier',          required: true,  desc: 'Exact supplier name, e.g. Kenchic Ltd' },
   { key: 'temp_zone',         label: 'temp_zone',         required: true,  desc: 'One of: frozen, chilled, cool, ambient' },
   { key: 'unit',              label: 'unit',              required: true,  desc: 'One of: kg, g, each, litre, ml, pack' },
-  { key: 'cost_price_kes',    label: 'cost_price_kes',    required: true,  desc: 'Decimal KES, e.g. 450.00' },
-  { key: 'selling_price_kes', label: 'selling_price_kes', required: true,  desc: 'Decimal KES, e.g. 580.00' },
+  { key: 'cost_price_cents',    label: 'cost_price_cents',    required: true,  desc: 'Decimal KES, e.g. 450.00' },
+  { key: 'selling_price_cents', label: 'selling_price_cents', required: true,  desc: 'Decimal KES, e.g. 580.00' },
   { key: 'shelf_life_days',   label: 'shelf_life_days',   required: true,  desc: 'Positive integer, e.g. 7' },
   { key: 'reorder_level',     label: 'reorder_level',     required: true,  desc: 'Non-negative integer in base units, e.g. 25' },
   { key: 'moq',               label: 'moq',               required: true,  desc: 'Supplier minimum order quantity, e.g. 50' },
-  { key: 'barcode',           label: 'barcode',           required: false, desc: 'UPC/EAN barcode, optional — leave blank if none' }
+  { key: 'barcode',           label: 'barcode',           required: false, desc: 'UPC/EAN barcode, optional â€” leave blank if none' }
 ];
 
 const validateRows = (rows: string[][], catList: Category[], supList: Supplier[], hasHeaders: boolean) => {
@@ -74,10 +75,10 @@ const validateRows = (rows: string[][], catList: Category[], supList: Supplier[]
     if (!VALID_UNITS.includes(unit || '')) errors.push({ row: rowNum, col: 'unit', message: `Must be one of: ${VALID_UNITS.join(', ')}` });
 
     const cost = parseFloat(costPrice || '');
-    if (isNaN(cost) || cost <= 0) errors.push({ row: rowNum, col: 'cost_price_kes', message: 'Must be a positive number, e.g. 450.00' });
+    if (isNaN(cost) || cost <= 0) errors.push({ row: rowNum, col: 'cost_price_cents', message: 'Must be a positive number, e.g. 450.00' });
 
     const sell = parseFloat(sellingPrice || '');
-    if (isNaN(sell) || sell <= 0) errors.push({ row: rowNum, col: 'selling_price_kes', message: 'Must be a positive number, e.g. 580.00' });
+    if (isNaN(sell) || sell <= 0) errors.push({ row: rowNum, col: 'selling_price_cents', message: 'Must be a positive number, e.g. 580.00' });
 
     const shelf = parseInt(shelfLife || '', 10);
     if (isNaN(shelf) || shelf <= 0) errors.push({ row: rowNum, col: 'shelf_life_days', message: 'Must be a positive whole number, e.g. 7' });
@@ -101,6 +102,7 @@ export default function BulkSkuUploadModal({
   triggerToast,
   currentUser
 }: BulkSkuUploadModalProps) {
+  const { currencyCode } = useCurrency();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [pastedText, setPastedText] = useState<string>('');
   const [hasHeaders, setHasHeaders] = useState<boolean>(true);
@@ -237,8 +239,8 @@ export default function BulkSkuUploadModal({
           supplier_name: matchedSup.name,
           temp_zone: tempZone,
           unit: unit,
-          cost_price_kes: parseFloat(costPrice),
-          selling_price_kes: parseFloat(sellingPrice),
+          cost_price_cents: parseFloat(costPrice),
+          selling_price_cents: parseFloat(sellingPrice),
           shelf_life_days: parseInt(shelfLife, 10),
           reorder_level: parseInt(reorderLevel, 10),
           moq: parseInt(moq, 10),
@@ -348,8 +350,8 @@ export default function BulkSkuUploadModal({
           
           ...basePreset,
 
-          cost_price_kes: Math.round(item.cost_price_kes * 100),
-          selling_price_kes: Math.round(item.selling_price_kes * 100),
+          cost_price_cents: Math.round(item.cost_price_cents * 100),
+          selling_price_cents: Math.round(item.selling_price_cents * 100),
           shelf_life_days: item.shelf_life_days,
           reorder_level: item.reorder_level,
           moq: item.moq,
@@ -509,7 +511,7 @@ export default function BulkSkuUploadModal({
                 <textarea
                   value={pastedText}
                   onChange={(e) => setPastedText(e.target.value)}
-                  placeholder="name,category,supplier,temp_zone,unit,cost_price_kes,selling_price_kes,shelf_life_days,reorder_level,moq,barcode&#10;Kenchic Whole Chicken 1.2kg,Fresh Poultry & Meats,Kenchic Ltd,chilled,each,450.00,580.00,4,25,10,"
+                  placeholder="name,category,supplier,temp_zone,unit,cost_price_cents,selling_price_cents,shelf_life_days,reorder_level,moq,barcode&#10;Kenchic Whole Chicken 1.2kg,Fresh Poultry & Meats,Kenchic Ltd,chilled,each,450.00,580.00,4,25,10,"
                   className="w-full h-44 p-4 border border-slate-200 rounded-xl font-mono text-xs outline-hidden focus:border-teal-500 bg-slate-50/20 text-slate-800 placeholder-slate-400 focus:bg-white transition-colors"
                 />
               </div>
@@ -531,7 +533,7 @@ export default function BulkSkuUploadModal({
                   <div className="bg-rose-50 border border-rose-100 rounded-xl p-3 text-xs text-rose-850 flex items-start gap-2.5">
                     <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600 mt-0.5" />
                     <div>
-                      <p className="font-bold">Validation Failed — Action Required</p>
+                      <p className="font-bold">Validation Failed â€” Action Required</p>
                       <p className="mt-0.5">Please review the validation errors below. You must correct your spreadsheet columns or cell values and re-upload/re-paste the correct data.</p>
                     </div>
                   </div>
@@ -559,7 +561,7 @@ export default function BulkSkuUploadModal({
                   </div>
 
                   <div className="bg-rose-50 text-rose-800 px-4 py-3 rounded-xl border border-rose-200 text-xs font-bold text-center">
-                    ❌ {validationErrors.length} errors found — fix your file and re-upload.
+                    âŒ {validationErrors.length} errors found â€” fix your file and re-upload.
                   </div>
                 </div>
               ) : (
@@ -583,8 +585,8 @@ export default function BulkSkuUploadModal({
                           <th className="p-2.5">Supplier</th>
                           <th className="p-2.5">Temp Zone</th>
                           <th className="p-2.5">Unit</th>
-                          <th className="p-2.5">Cost (KES)</th>
-                          <th className="p-2.5">Sell (KES)</th>
+                          <th className="p-2.5">Cost ({currencyCode})</th>
+                          <th className="p-2.5">Sell ({currencyCode})</th>
                           <th className="p-2.5">Shelf Life</th>
                           <th className="p-2.5">Reorder Lvl</th>
                           <th className="p-2.5">MOQ</th>
@@ -600,8 +602,8 @@ export default function BulkSkuUploadModal({
                             <td className="p-2.5 text-slate-600 truncate max-w-[130px]">{item.supplier_name}</td>
                             <td className="p-2.5 text-slate-600 font-mono text-[10px]">{item.temp_zone}</td>
                             <td className="p-2.5 text-slate-600 font-mono text-[10px]">{item.unit}</td>
-                            <td className="p-2.5 text-slate-850 font-semibold">{item.cost_price_kes.toFixed(2)}</td>
-                            <td className="p-2.5 text-slate-850 font-semibold">{item.selling_price_kes.toFixed(2)}</td>
+                            <td className="p-2.5 text-slate-850 font-semibold">{item.cost_price_cents.toFixed(2)}</td>
+                            <td className="p-2.5 text-slate-850 font-semibold">{item.selling_price_cents.toFixed(2)}</td>
                             <td className="p-2.5 text-slate-600 font-semibold">{item.shelf_life_days} days</td>
                             <td className="p-2.5 text-slate-600">{item.reorder_level}</td>
                             <td className="p-2.5 text-slate-600">{item.moq}</td>
@@ -613,7 +615,7 @@ export default function BulkSkuUploadModal({
                   </div>
 
                   <div className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-4 py-3 rounded-xl text-center text-xs font-bold">
-                    🚀 Ready to upload {validData.length} valid products!
+                    ðŸš€ Ready to upload {validData.length} valid products!
                   </div>
                 </div>
               )}
@@ -753,3 +755,4 @@ export default function BulkSkuUploadModal({
     </div>
   );
 }
+

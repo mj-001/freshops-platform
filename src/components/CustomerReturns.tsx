@@ -1,5 +1,6 @@
-// src/components/CustomerReturns.tsx
+﻿// src/components/CustomerReturns.tsx
 import React, { useEffect, useState } from 'react';
+import { useCurrency } from '../hooks/useCurrency';
 import { 
   RotateCcw, 
   Plus, 
@@ -36,6 +37,7 @@ interface CustomerReturnsProps {
 }
 
 export default function CustomerReturns({ currentUser, triggerToast }: CustomerReturnsProps) {
+  const { currencyCode, format: formatMoney } = useCurrency();
   const [returns, setReturns] = useState<CustomerReturn[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [users, setUsers] = useState<UserType[]>([]);
@@ -153,9 +155,9 @@ export default function CustomerReturns({ currentUser, triggerToast }: CustomerR
     if (order) {
       const selections: typeof orderLineSelections = {};
       (order.lines || []).forEach((line: any) => {
-        // unit_price_kes is divided by 100 on retrieve, wait! we use KES cents internally.
+        // unit_price_cents is divided by 100 on retrieve, wait! we use KES cents internally.
         // Let's safe-guard unit price
-        const price = line.unit_price_kes || line.price_kes || 0;
+        const price = line.unit_price_cents || line.price_cents || 0;
         selections[line.id] = {
           checked: false,
           qty: line.qty_fulfilled || line.qty_ordered || 1,
@@ -195,7 +197,7 @@ export default function CustomerReturns({ currentUser, triggerToast }: CustomerR
             disposition: null,
             restocked_to_location_id: null,
             write_off_id: null,
-            credit_value_kes: val.creditValueKes, // in cents
+            credit_value_cents: val.creditValueKes, // in cents
             inspected_by: null,
             inspected_at: null
           };
@@ -242,7 +244,7 @@ export default function CustomerReturns({ currentUser, triggerToast }: CustomerR
         received_by: payload.physical_collection_required ? null : (currentUser?.id || 'U-RECEIVER'),
         received_at: payload.physical_collection_required ? null : new Date().toISOString(),
         receipt_temp_celsius: null,
-        total_credit_value_kes: totalCreditValue,
+        total_credit_value_cents: totalCreditValue,
         credit_issued: false,
         credit_issued_at: null,
         closed_at: null,
@@ -272,7 +274,7 @@ export default function CustomerReturns({ currentUser, triggerToast }: CustomerR
       resetWizard();
     } catch (err) {
       console.error(err);
-      triggerToast('Raising return failed — check connection.', 'error');
+      triggerToast('Raising return failed â€” check connection.', 'error');
     }
   };
 
@@ -699,7 +701,7 @@ export default function CustomerReturns({ currentUser, triggerToast }: CustomerR
                               </span>
                             </td>
                             <td className="p-4 text-right font-black text-slate-900">
-                              KES {(r.total_credit_value_kes / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                              KES {(r.total_credit_value_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                             </td>
                             <td className="p-4 text-right text-slate-500 text-[10px]">
                               {new Date(r.raised_at).toLocaleDateString()}
@@ -743,7 +745,7 @@ export default function CustomerReturns({ currentUser, triggerToast }: CustomerR
                         {typeInfo.label}
                       </span>
                       <span className="font-bold text-teal-600 font-mono text-xs">
-                        KES {(r.total_credit_value_kes / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        KES {(r.total_credit_value_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                       </span>
                     </div>
                   </div>
@@ -803,7 +805,7 @@ export default function CustomerReturns({ currentUser, triggerToast }: CustomerR
                               isActive ? 'bg-amber-100 text-amber-900 border-amber-400 animate-pulse' :
                               'bg-white border-slate-300 text-slate-450'
                             }`}>
-                              {isCompleted ? '✓' : i + 1}
+                              {isCompleted ? 'âœ“' : i + 1}
                             </div>
                             {i < arr.length - 1 && (
                               <div className={`w-0.5 h-6 ${isCompleted ? 'bg-teal-500' : 'bg-slate-200'}`} />
@@ -834,7 +836,7 @@ export default function CustomerReturns({ currentUser, triggerToast }: CustomerR
                           <div className="flex justify-between gap-1">
                             <span className="font-bold text-slate-800 leading-normal line-clamp-1">{line.sku_name}</span>
                             <span className="font-black text-slate-900 shrink-0">
-                              KES {(line.credit_value_kes / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                              KES {(line.credit_value_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                             </span>
                           </div>
                           
@@ -862,7 +864,7 @@ export default function CustomerReturns({ currentUser, triggerToast }: CustomerR
                     <span className="font-black text-slate-800 block">Credit Accounting Details</span>
                     <div className="grid grid-cols-2 gap-x-2 gap-y-1 font-mono text-[11px]">
                       <span className="text-slate-500">Total Credit:</span>
-                      <strong className="text-slate-900 text-right">KES {(selectedReturn.total_credit_value_kes / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
+                      <strong className="text-slate-900 text-right">KES {(selectedReturn.total_credit_value_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong>
                       
                       <span className="text-slate-500">Issued Status:</span>
                       <strong className="text-right">
@@ -1106,7 +1108,7 @@ export default function CustomerReturns({ currentUser, triggerToast }: CustomerR
 
                                 {restrictionActive ? (
                                   <div className="p-1 text-rose-600 font-semibold bg-rose-50 border border-rose-100 rounded">
-                                    🔴 Cold chain not intact — cannot restock
+                                    ðŸ”´ Cold chain not intact â€” cannot restock
                                   </div>
                                 ) : null}
 
@@ -1184,7 +1186,7 @@ export default function CustomerReturns({ currentUser, triggerToast }: CustomerR
                           onClick={() => handleIssueCredit(selectedReturn.id)}
                           className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-2.5 px-3 rounded-xl min-h-[44px] cursor-pointer text-xs"
                         >
-                          Issue KES {(selectedReturn.total_credit_value_kes / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })} Credit Note
+                          Issue KES {(selectedReturn.total_credit_value_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })} Credit Note
                         </button>
                       )}
 
@@ -1233,7 +1235,7 @@ export default function CustomerReturns({ currentUser, triggerToast }: CustomerR
                   <RotateCcw className="h-4.5 w-4.5 text-teal-500" />
                   <span>Raise Customer Return File</span>
                 </h3>
-                <p className="text-[10px] text-slate-400 font-mono block mt-0.5">Step {wizardStep} of 2 • Secure Identity Verification</p>
+                <p className="text-[10px] text-slate-400 font-mono block mt-0.5">Step {wizardStep} of 2 â€¢ Secure Identity Verification</p>
               </div>
               <button
                 onClick={() => setShowWizard(false)}
@@ -1259,7 +1261,7 @@ export default function CustomerReturns({ currentUser, triggerToast }: CustomerR
                       <option value="">-- Choose Order ID --</option>
                       {orders.map(o => (
                         <option key={o.id} value={o.id}>
-                          [{o.id}] {o.customer_name} • {new Date(o.created_at || o.delivery_date).toLocaleDateString()}
+                          [{o.id}] {o.customer_name} â€¢ {new Date(o.created_at || o.delivery_date).toLocaleDateString()}
                         </option>
                       ))}
                     </select>
@@ -1397,7 +1399,7 @@ export default function CustomerReturns({ currentUser, triggerToast }: CustomerR
                             <div className="text-xs flex-1">
                               <span className="font-bold text-slate-800 leading-normal block">{line.sku_name}</span>
                               <span className="text-[10px] text-slate-500 font-mono block mt-0.5">
-                                Ordered qty: {displayQty(line.qty_ordered, matchedSku)} • Fulfilled: {displayQty(line.qty_fulfilled, matchedSku)}
+                                Ordered qty: {displayQty(line.qty_ordered, matchedSku)} â€¢ Fulfilled: {displayQty(line.qty_fulfilled, matchedSku)}
                               </span>
                             </div>
                           </label>
@@ -1413,7 +1415,7 @@ export default function CustomerReturns({ currentUser, triggerToast }: CustomerR
                                   value={sel.qty}
                                   onChange={(e) => {
                                     const qty = Math.min(maxQty, Math.max(1, parseInt(e.target.value) || 1));
-                                    const price = line.unit_price_kes || line.price_kes || 0;
+                                    const price = line.unit_price_cents || line.price_cents || 0;
                                     setOrderLineSelections(p => ({
                                       ...p,
                                       [line.id]: { 
@@ -1428,7 +1430,7 @@ export default function CustomerReturns({ currentUser, triggerToast }: CustomerR
                               </div>
 
                               <div>
-                                <label className="text-[10px] uppercase text-slate-400 font-bold block mb-1">Credit Value KES (edit-ready)</label>
+                                <label className="text-[10px] uppercase text-slate-400 font-bold block mb-1">Credit Value {currencyCode} (edit-ready)</label>
                                 <input
                                   type="number"
                                   placeholder="0.00"
@@ -1471,7 +1473,7 @@ export default function CustomerReturns({ currentUser, triggerToast }: CustomerR
                   <div className="p-3 bg-teal-50 border border-teal-200 rounded-xl flex items-center justify-between text-xs">
                     <span className="font-bold text-slate-700">Total Credit Value Accrued:</span>
                     <strong className="text-teal-980 font-mono text-sm font-black">
-                      KES {((Object.values(orderLineSelections).reduce((acc: number, curr: any) => curr.checked ? acc + curr.creditValueKes : acc, 0) as number) / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      {formatMoney(Object.values(orderLineSelections).reduce((acc: number, curr: any) => curr.checked ? acc + curr.creditValueKes : acc, 0) as number)}
                     </strong>
                   </div>
 
@@ -1530,3 +1532,4 @@ export default function CustomerReturns({ currentUser, triggerToast }: CustomerR
     </div>
   );
 }
+

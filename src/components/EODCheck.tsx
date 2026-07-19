@@ -1,5 +1,6 @@
-// src/components/EODCheck.tsx
+﻿// src/components/EODCheck.tsx
 import React, { useEffect, useState } from 'react';
+import { useCurrency } from '../hooks/useCurrency';
 import { 
   Moon, 
   Plus, 
@@ -42,6 +43,7 @@ interface EODCheckProps {
 }
 
 export default function EODCheck({ currentUser, triggerToast }: EODCheckProps) {
+  const { format: formatMoney } = useCurrency();
   const [checks, setChecks] = useState<CrossDockEODCheck[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [skus, setSkus] = useState<SKU[]>([]);
@@ -204,10 +206,10 @@ export default function EODCheck({ currentUser, triggerToast }: EODCheckProps) {
         status: 'pending',
         lines: demoLines,
         sellthrough_rate_pct: null,
-        total_transferred_kes: 4500000,
-        total_sold_kes: 3825000,
-        total_carried_forward_kes: 0,
-        total_written_off_kes: 0
+        total_transferred_cents: 4500000,
+        total_sold_cents: 3825000,
+        total_carried_forward_cents: 0,
+        total_written_off_cents: 0
       };
 
       const res = await fetch('/api/v1/eod-checks', {
@@ -232,7 +234,7 @@ export default function EODCheck({ currentUser, triggerToast }: EODCheckProps) {
       }
       setShowAddCheck(false);
     } catch {
-      triggerToast('Initiating EOD failed — check configuration.', 'error');
+      triggerToast('Initiating EOD failed â€” check configuration.', 'error');
     }
   };
 
@@ -260,7 +262,7 @@ export default function EODCheck({ currentUser, triggerToast }: EODCheckProps) {
         triggerToast(json?.error?.message || 'Line resolution failed on server.', 'error');
       }
     } catch {
-      triggerToast('Line resolution failed — check configuration.', 'error');
+      triggerToast('Line resolution failed â€” check configuration.', 'error');
     }
 
     setSelectedLineForCf(null);
@@ -287,7 +289,7 @@ export default function EODCheck({ currentUser, triggerToast }: EODCheckProps) {
         triggerToast(json?.error?.message || 'Finalize EOD failed on server.', 'error');
       }
     } catch {
-      triggerToast('Finalize EOD failed — check configuration.', 'error');
+      triggerToast('Finalize EOD failed â€” check configuration.', 'error');
     }
   };
 
@@ -297,8 +299,8 @@ export default function EODCheck({ currentUser, triggerToast }: EODCheckProps) {
     ? Math.round(completedChecks.reduce((acc, curr) => acc + (curr.sellthrough_rate_pct || 0), 0) / completedChecks.length)
     : 0;
   
-  const totalWrittenOff = completedChecks.reduce((acc, curr) => acc + (curr.total_written_off_kes || 0), 0);
-  const totalCarriedForward = completedChecks.reduce((acc, curr) => acc + (curr.total_carried_forward_kes || 0), 0);
+  const totalWrittenOff = completedChecks.reduce((acc, curr) => acc + (curr.total_written_off_cents || 0), 0);
+  const totalCarriedForward = completedChecks.reduce((acc, curr) => acc + (curr.total_carried_forward_cents || 0), 0);
 
   // Filter Checks by Warehouse
   const filteredChecks = checks.filter(c => {
@@ -351,24 +353,24 @@ export default function EODCheck({ currentUser, triggerToast }: EODCheckProps) {
 
         <div className="p-4 border border-slate-150 rounded-2xl bg-white flex items-center gap-4">
           <div className="h-10 w-10 bg-rose-50 text-rose-600 font-black flex items-center justify-center rounded-lg text-md">
-            🗑
+            ðŸ—‘
           </div>
           <div className="space-y-0.5">
             <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">Total Written Off (7D)</span>
             <strong className="text-base text-rose-600 font-black font-mono block">
-              KES {(totalWrittenOff / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              {formatMoney(totalWrittenOff)}
             </strong>
           </div>
         </div>
 
         <div className="p-4 border border-slate-150 rounded-2xl bg-white flex items-center gap-4">
           <div className="h-10 w-10 bg-amber-50 text-amber-600 font-black flex items-center justify-center rounded-lg text-md">
-            ⇄
+            â‡„
           </div>
           <div className="space-y-0.5">
             <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">Carried Forward (7D)</span>
             <strong className="text-base text-amber-600 font-black font-mono block">
-              KES {(totalCarriedForward / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              {formatMoney(totalCarriedForward)}
             </strong>
           </div>
         </div>
@@ -454,10 +456,10 @@ export default function EODCheck({ currentUser, triggerToast }: EODCheckProps) {
                               )}
                             </td>
                             <td className="p-4 text-right font-black text-rose-600 font-mono">
-                              KES {(c.total_written_off_kes / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                              KES {(c.total_written_off_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                             </td>
                             <td className="p-4 text-right font-black text-amber-600 font-mono">
-                              KES {(c.total_carried_forward_kes / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                              KES {(c.total_carried_forward_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                             </td>
                           </tr>
                         );
@@ -559,7 +561,7 @@ export default function EODCheck({ currentUser, triggerToast }: EODCheckProps) {
                           <div className="flex justify-between items-start gap-1 text-xs">
                             <div>
                               <strong className="text-slate-800 leading-normal block">{line.sku_name}</strong>
-                              <span className="text-[10px] font-mono text-slate-400 block mt-0.5">Lot: {line.batch_number} • Bin: {line.location_code}</span>
+                              <span className="text-[10px] font-mono text-slate-400 block mt-0.5">Lot: {line.batch_number} â€¢ Bin: {line.location_code}</span>
                             </div>
                             
                             {isResolved ? (
@@ -649,7 +651,7 @@ export default function EODCheck({ currentUser, triggerToast }: EODCheckProps) {
                           {/* WO Confirmation details overlay */}
                           {selectedLineForWo?.id === line.id && (
                             <div className="p-2 border border-rose-220 rounded-lg bg-white space-y-2 text-xs animate-slideDown text-slate-700">
-                              <span className="font-extrabold text-rose-750 block">⚠️ Write Off Confirmation</span>
+                              <span className="font-extrabold text-rose-750 block">âš ï¸ Write Off Confirmation</span>
                               <p className="text-[10px] leading-normal text-slate-400">
                                 Write off <strong className="text-slate-700 font-bold">{displayQty(line.qty_remaining, matchedSku)}</strong> of {line.sku_name}? This cannot be undone.
                               </p>
@@ -753,3 +755,4 @@ export default function EODCheck({ currentUser, triggerToast }: EODCheckProps) {
     </div>
   );
 }
+

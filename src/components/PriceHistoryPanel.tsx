@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
+import { useCurrency } from '../hooks/useCurrency';
 import { 
   History, 
   ChevronDown, 
@@ -35,6 +36,7 @@ export default function PriceHistoryPanel({
   triggerToast,
   onPriceChanged
 }: PriceHistoryPanelProps) {
+  const { currencyCode } = useCurrency();
   const [history, setHistory] = useState<PriceHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -107,10 +109,10 @@ export default function PriceHistoryPanel({
     const sellingVal = parseFloat(newSellingKes);
 
     if (isNaN(costVal) || costVal < 0) {
-      errors.cost = 'Please provide a valid cost price (KES).';
+      errors.cost = `Please provide a valid cost price (${currencyCode}).`;
     }
     if (isNaN(sellingVal) || sellingVal <= 0) {
-      errors.selling = 'Please provide a valid positive selling price (KES).';
+      errors.selling = `Please provide a valid positive selling price (${currencyCode}).`;
     }
     if (!reason) {
       errors.reason = 'Pricing reason is required.';
@@ -130,8 +132,8 @@ export default function PriceHistoryPanel({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          cost_price_kes: Math.round(costVal * 100),
-          selling_price_kes: Math.round(sellingVal * 100),
+          cost_price_cents: Math.round(costVal * 100),
+          selling_price_cents: Math.round(sellingVal * 100),
           effective_from: effectiveFrom + 'T00:00:00.000Z',
           reason,
           notes: notes.trim() || null
@@ -207,21 +209,21 @@ export default function PriceHistoryPanel({
   // Delta calculation: Only between index 0 & index 1 (the two most recent logged items)
   let deltaCostElement: React.ReactNode = null;
   if (history.length >= 2) {
-    const currentCost = history[0].cost_price_kes / 100;
-    const previousCost = history[1].cost_price_kes / 100;
+    const currentCost = history[0].cost_price_cents / 100;
+    const previousCost = history[1].cost_price_cents / 100;
     const diff = currentCost - previousCost;
     if (diff > 0) {
       deltaCostElement = (
         <span className="inline-flex items-center gap-0.5 text-rose-600 text-[10px] font-black">
           <TrendingUp className="h-3 w-3" />
-          Cost ↑ KES {diff.toFixed(2)}
+          Cost ↑ {currencyCode} {diff.toFixed(2)}
         </span>
       );
     } else if (diff < 0) {
       deltaCostElement = (
         <span className="inline-flex items-center gap-0.5 text-emerald-600 text-[10px] font-black">
           <TrendingDown className="h-3 w-3" />
-          Cost ↓ KES {Math.abs(diff).toFixed(2)}
+          Cost ↓ {currencyCode} {Math.abs(diff).toFixed(2)}
         </span>
       );
     }
@@ -244,7 +246,7 @@ export default function PriceHistoryPanel({
             onClick={() => setShowForm(!showForm)}
             className="text-[11px] font-black tracking-tight text-teal-600 hover:text-teal-700 hover:underline inline-flex items-center gap-0.5 cursor-pointer min-h-[44px]"
           >
-            <span>↕ Change Price</span>
+            <span>â†• Change Price</span>
           </button>
         )}
       </div>
@@ -272,7 +274,7 @@ export default function PriceHistoryPanel({
           <form onSubmit={handleSubmit} className="space-y-3">
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-[9.5px] font-black text-slate-500 uppercase tracking-wider block mb-1">Cost Price (KES) *</label>
+                <label className="text-[9.5px] font-black text-slate-500 uppercase tracking-wider block mb-1">Cost Price ({currencyCode}) *</label>
                 <input
                   type="number"
                   step="0.01"
@@ -291,7 +293,7 @@ export default function PriceHistoryPanel({
               </div>
 
               <div>
-                <label className="text-[9.5px] font-black text-slate-500 uppercase tracking-wider block mb-1">Selling Price (KES) *</label>
+                <label className="text-[9.5px] font-black text-slate-500 uppercase tracking-wider block mb-1">Selling Price ({currencyCode}) *</label>
                 <input
                   type="number"
                   step="0.01"
@@ -432,8 +434,8 @@ export default function PriceHistoryPanel({
 
                       {/* Financial statistics row */}
                       <div className="text-[11px] text-slate-800 font-medium leading-none">
-                        Cost <strong className="text-slate-900">KES {(item.cost_price_kes / 100).toFixed(2)}</strong> · 
-                        Selling <strong className="text-slate-900">KES {(item.selling_price_kes / 100).toFixed(2)}</strong>
+                        Cost <strong className="text-slate-900">KES {(item.cost_price_cents / 100).toFixed(2)}</strong> Â· 
+                        Selling <strong className="text-slate-900">KES {(item.selling_price_cents / 100).toFixed(2)}</strong>
                       </div>
 
                       {/* Management details/notes line */}
@@ -485,3 +487,4 @@ export default function PriceHistoryPanel({
     </div>
   );
 }
+

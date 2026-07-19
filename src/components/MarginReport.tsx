@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
+import { useCurrency } from '../hooks/useCurrency';
 import { 
   TrendingUp, 
   Search, 
@@ -42,9 +43,9 @@ interface SKUMarginItem {
   sku_id: string;
   sku_name: string;
   qty_ordered: number;
-  revenue_kes: number;
-  cogs_kes: number;
-  profit_kes: number;
+  revenue_cents: number;
+  cogs_cents: number;
+  profit_cents: number;
   margin_pct: number;
 }
 
@@ -52,9 +53,9 @@ interface OrderMarginItem {
   order_id: string;
   customer_name: string;
   qty_ordered: number;
-  revenue_kes: number;
-  cogs_kes: number;
-  profit_kes: number;
+  revenue_cents: number;
+  cogs_cents: number;
+  profit_cents: number;
   margin_pct: number;
   created_at: string;
 }
@@ -65,6 +66,7 @@ interface MarginReportProps {
 }
 
 export default function MarginReport({ currentUser, triggerToast }: MarginReportProps) {
+  const { currencyCode, format: formatMoney } = useCurrency();
   const [activeTab, setActiveTab] = useState<'sku' | 'order'>('sku');
   const [skuData, setSkuData] = useState<SKUMarginItem[]>([]);
   const [orderData, setOrderData] = useState<OrderMarginItem[]>([]);
@@ -173,11 +175,11 @@ export default function MarginReport({ currentUser, triggerToast }: MarginReport
 
     // Sort order
     filtered.sort((a, b) => {
-      if (sortBy === 'revenue_desc') return b.revenue_kes - a.revenue_kes;
-      if (sortBy === 'revenue_asc') return a.revenue_kes - b.revenue_kes;
+      if (sortBy === 'revenue_desc') return b.revenue_cents - a.revenue_cents;
+      if (sortBy === 'revenue_asc') return a.revenue_cents - b.revenue_cents;
       if (sortBy === 'margin_desc') return b.margin_pct - a.margin_pct;
       if (sortBy === 'margin_asc') return a.margin_pct - b.margin_pct;
-      if (sortBy === 'profit_desc') return b.profit_kes - a.profit_kes;
+      if (sortBy === 'profit_desc') return b.profit_cents - a.profit_cents;
       if (sortBy === 'qty_desc') return b.qty_ordered - a.qty_ordered;
       return 0;
     });
@@ -201,11 +203,11 @@ export default function MarginReport({ currentUser, triggerToast }: MarginReport
 
     // Sort order
     filtered.sort((a, b) => {
-      if (sortBy === 'revenue_desc') return b.revenue_kes - a.revenue_kes;
-      if (sortBy === 'revenue_asc') return a.revenue_kes - b.revenue_kes;
+      if (sortBy === 'revenue_desc') return b.revenue_cents - a.revenue_cents;
+      if (sortBy === 'revenue_asc') return a.revenue_cents - b.revenue_cents;
       if (sortBy === 'margin_desc') return b.margin_pct - a.margin_pct;
       if (sortBy === 'margin_asc') return a.margin_pct - b.margin_pct;
-      if (sortBy === 'profit_desc') return b.profit_kes - a.profit_kes;
+      if (sortBy === 'profit_desc') return b.profit_cents - a.profit_cents;
       if (sortBy === 'qty_desc') return b.qty_ordered - a.qty_ordered;
       return 0;
     });
@@ -217,16 +219,16 @@ export default function MarginReport({ currentUser, triggerToast }: MarginReport
   const getTotals = () => {
     if (activeTab === 'sku') {
       const filtered = getFilteredSKUData();
-      const revenue = filtered.reduce((acc, curr) => acc + curr.revenue_kes, 0);
-      const cogs = filtered.reduce((acc, curr) => acc + curr.cogs_kes, 0);
+      const revenue = filtered.reduce((acc, curr) => acc + curr.revenue_cents, 0);
+      const cogs = filtered.reduce((acc, curr) => acc + curr.cogs_cents, 0);
       const profit = revenue - cogs;
       const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
       const totalUnits = filtered.reduce((acc, curr) => acc + curr.qty_ordered, 0);
       return { revenue, cogs, profit, margin, count: filtered.length, secondaryMetric: totalUnits, secondaryLabel: 'SKUs Active' };
     } else {
       const filtered = getFilteredOrderData();
-      const revenue = filtered.reduce((acc, curr) => acc + curr.revenue_kes, 0);
-      const cogs = filtered.reduce((acc, curr) => acc + curr.cogs_kes, 0);
+      const revenue = filtered.reduce((acc, curr) => acc + curr.revenue_cents, 0);
+      const cogs = filtered.reduce((acc, curr) => acc + curr.cogs_cents, 0);
       const profit = revenue - cogs;
       const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
       const totalUnits = filtered.reduce((acc, curr) => acc + curr.qty_ordered, 0);
@@ -277,22 +279,22 @@ export default function MarginReport({ currentUser, triggerToast }: MarginReport
       csvContent += 'FRESHOPS WMS - MARGIN REPORT BY SKU\r\n';
       csvContent += `Generated On: ,${new Date().toLocaleString()}\r\n`;
       csvContent += `Filters Applied: Search="${searchQuery}", Category="${selectedCategory}", Prefix="${skuNamePrefix}", MarginGroup="${marginGroupFilter}", Sort="${sortBy}"\r\n\r\n`;
-      csvContent += 'SKU ID,Product Category,SKU Name,Qty Ordered,Revenue (KES),COGS Cost (KES),Gross Profit (KES),Margin %\r\n';
+      csvContent += `SKU ID,Product Category,SKU Name,Qty Ordered,Revenue (${currencyCode}),COGS Cost (${currencyCode}),Gross Profit (${currencyCode}),Margin %\r\n`;
       
       getFilteredSKUData().forEach(item => {
         const escapedName = item.sku_name.replace(/"/g, '""');
         const catName = getSkuCategoryName(item.sku_id);
-        csvContent += `${item.sku_id},"${catName.replace(/"/g, '""')}","${escapedName}",${item.qty_ordered},${item.revenue_kes},${item.cogs_kes},${item.profit_kes},${item.margin_pct}%\r\n`;
+        csvContent += `${item.sku_id},"${catName.replace(/"/g, '""')}","${escapedName}",${item.qty_ordered},${item.revenue_cents},${item.cogs_cents},${item.profit_cents},${item.margin_pct}%\r\n`;
       });
     } else {
       csvContent += 'FRESHOPS WMS - MARGIN REPORT BY CLIENT ORDER\r\n';
       csvContent += `Generated On: ,${new Date().toLocaleString()}\r\n`;
       csvContent += `Filters Applied: Search="${searchQuery}", MarginGroup="${marginGroupFilter}", Sort="${sortBy}"\r\n\r\n`;
-      csvContent += 'Order ID,Customer Name,Units Ordered,Order Date,Revenue (KES),COGS Cost (KES),Gross Profit (KES),Margin %\r\n';
+      csvContent += `Order ID,Customer Name,Units Ordered,Order Date,Revenue (${currencyCode}),COGS Cost (${currencyCode}),Gross Profit (${currencyCode}),Margin %\r\n`;
       
       getFilteredOrderData().forEach(item => {
         const escapedCustomer = item.customer_name.replace(/"/g, '""');
-        csvContent += `${item.order_id},"${escapedCustomer}",${item.qty_ordered},"${item.created_at}",${item.revenue_kes},${item.cogs_kes},${item.profit_kes},${item.margin_pct}%\r\n`;
+        csvContent += `${item.order_id},"${escapedCustomer}",${item.qty_ordered},"${item.created_at}",${item.revenue_cents},${item.cogs_cents},${item.profit_cents},${item.margin_pct}%\r\n`;
       });
     }
 
@@ -314,7 +316,7 @@ export default function MarginReport({ currentUser, triggerToast }: MarginReport
       rows.push([`Generated On: ${new Date().toLocaleString()}`]);
       rows.push([`Filters Applied: Search="${searchQuery}", Category="${selectedCategory}", Prefix="${skuNamePrefix}", MarginGroup="${marginGroupFilter}", Sort="${sortBy}"`]);
       rows.push([]);
-      rows.push(['SKU ID', 'Product Category', 'SKU Name', 'Qty Ordered', 'Revenue (KES)', 'COGS Cost (KES)', 'Gross Profit (KES)', 'Margin %']);
+      rows.push(['SKU ID', 'Product Category', 'SKU Name', 'Qty Ordered', `Revenue (${currencyCode})`, `COGS Cost (${currencyCode})`, `Gross Profit (${currencyCode})`, 'Margin %']);
       
       getFilteredSKUData().forEach(item => {
         const catName = getSkuCategoryName(item.sku_id);
@@ -323,9 +325,9 @@ export default function MarginReport({ currentUser, triggerToast }: MarginReport
           catName,
           item.sku_name,
           item.qty_ordered,
-          item.revenue_kes,
-          item.cogs_kes,
-          item.profit_kes,
+          item.revenue_cents,
+          item.cogs_cents,
+          item.profit_cents,
           `${item.margin_pct}%`
         ]);
       });
@@ -334,7 +336,7 @@ export default function MarginReport({ currentUser, triggerToast }: MarginReport
       rows.push([`Generated On: ${new Date().toLocaleString()}`]);
       rows.push([`Filters Applied: Search="${searchQuery}", MarginGroup="${marginGroupFilter}", Sort="${sortBy}"`]);
       rows.push([]);
-      rows.push(['Order ID', 'Customer Name', 'Units Ordered', 'Order Date', 'Revenue (KES)', 'COGS Cost (KES)', 'Gross Profit (KES)', 'Margin %']);
+      rows.push(['Order ID', 'Customer Name', 'Units Ordered', 'Order Date', `Revenue (${currencyCode})`, `COGS Cost (${currencyCode})`, `Gross Profit (${currencyCode})`, 'Margin %']);
       
       getFilteredOrderData().forEach(item => {
         rows.push([
@@ -342,9 +344,9 @@ export default function MarginReport({ currentUser, triggerToast }: MarginReport
           item.customer_name,
           item.qty_ordered,
           item.created_at,
-          item.revenue_kes,
-          item.cogs_kes,
-          item.profit_kes,
+          item.revenue_cents,
+          item.cogs_cents,
+          item.profit_cents,
           `${item.margin_pct}%`
         ]);
       });
@@ -355,21 +357,25 @@ export default function MarginReport({ currentUser, triggerToast }: MarginReport
   };
 
   // Chart preparation
+  const revenueKey = `Revenue (${currencyCode})`;
+  const cogsKey = `COGS (${currencyCode})`;
+  const profitKey = `Profit (${currencyCode})`;
+
   const getChartData = () => {
     if (activeTab === 'sku') {
       return getFilteredSKUData().slice(0, 8).map(item => ({
         name: item.sku_name.length > 18 ? `${item.sku_name.slice(0, 15)}...` : item.sku_name,
-        'Revenue (KES)': item.revenue_kes,
-        'COGS (KES)': item.cogs_kes,
-        'Profit (KES)': item.profit_kes,
+        [revenueKey]: item.revenue_cents,
+        [cogsKey]: item.cogs_cents,
+        [profitKey]: item.profit_cents,
         'Margin %': item.margin_pct
       }));
     } else {
       return getFilteredOrderData().slice(0, 8).map(item => ({
         name: item.order_id,
-        'Revenue (KES)': item.revenue_kes,
-        'COGS (KES)': item.cogs_kes,
-        'Profit (KES)': item.profit_kes,
+        [revenueKey]: item.revenue_cents,
+        [cogsKey]: item.cogs_cents,
+        [profitKey]: item.profit_cents,
         'Margin %': item.margin_pct
       }));
     }
@@ -489,7 +495,7 @@ export default function MarginReport({ currentUser, triggerToast }: MarginReport
                 <span className="text-2xl font-black text-slate-900 font-mono">
                   {totals.revenue.toLocaleString()}
                 </span>
-                <span className="text-xs font-semibold text-slate-500">KES</span>
+                <span className="text-xs font-semibold text-slate-500">{currencyCode}</span>
               </div>
               <div className="mt-2.5 flex items-center text-[10px] text-slate-500 font-medium">
                 <DollarSign className="h-3.5 w-3.5 text-slate-400 shrink-0 mr-1" />
@@ -504,7 +510,7 @@ export default function MarginReport({ currentUser, triggerToast }: MarginReport
                 <span className="text-2xl font-black text-slate-900 font-mono">
                   {totals.cogs.toLocaleString()}
                 </span>
-                <span className="text-xs font-semibold text-slate-500">KES</span>
+                <span className="text-xs font-semibold text-slate-500">{currencyCode}</span>
               </div>
               <div className="mt-2.5 flex items-center text-[10px] text-slate-500 font-medium">
                 <Package className="h-3.5 w-3.5 text-slate-400 shrink-0 mr-1" />
@@ -519,7 +525,7 @@ export default function MarginReport({ currentUser, triggerToast }: MarginReport
                 <span className={`text-2xl font-black font-mono ${totals.profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                   {totals.profit.toLocaleString()}
                 </span>
-                <span className="text-xs font-semibold text-slate-500">KES</span>
+                <span className="text-xs font-semibold text-slate-500">{currencyCode}</span>
               </div>
               <div className="mt-2.5 flex items-center text-[10px] font-semibold">
                 {totals.profit >= 0 ? (
@@ -558,7 +564,7 @@ export default function MarginReport({ currentUser, triggerToast }: MarginReport
                   <p className="text-[10px] text-slate-500">Vetting Revenue, Cost & Gross Profit Yields</p>
                 </div>
                 <span className="text-[9px] font-bold bg-slate-100 text-slate-600 border px-2 py-0.5 rounded-lg uppercase">
-                  Currency: KES
+                  Currency: {currencyCode}
                 </span>
               </div>
               
@@ -579,9 +585,9 @@ export default function MarginReport({ currentUser, triggerToast }: MarginReport
                         cursor={{ fill: 'rgba(241, 245, 249, 0.6)' }}
                       />
                       <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: '11px', fontWeight: 'bold' }} />
-                      <Bar dataKey="Revenue (KES)" fill="#0f172a" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="COGS (KES)" fill="#64748b" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="Profit (KES)" fill="#10b981" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey={revenueKey} fill="#0f172a" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey={cogsKey} fill="#64748b" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey={profitKey} fill="#10b981" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -600,7 +606,7 @@ export default function MarginReport({ currentUser, triggerToast }: MarginReport
                     <div className="flex items-center justify-between text-xs mb-1 font-semibold">
                       <span className="flex items-center gap-1.5 text-emerald-700">
                         <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                        High Margins (≥ 30%)
+                        High Margins (â‰¥ 30%)
                       </span>
                       <span className="text-slate-600 font-mono">
                         {skuData.length > 0 || orderData.length > 0 ? (
@@ -753,7 +759,7 @@ export default function MarginReport({ currentUser, triggerToast }: MarginReport
                     className="bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-700 font-bold focus:outline-hidden"
                   >
                     <option value="All">All Yield Tiers</option>
-                    <option value="High">High Margin (≥30%)</option>
+                    <option value="High">High Margin (â‰¥30%)</option>
                     <option value="Mid">Med Margin (15%-29%)</option>
                     <option value="Low">Low Margin (0%-14%)</option>
                     <option value="Negative">Deficit (&lt;0%)</option>
@@ -815,7 +821,7 @@ export default function MarginReport({ currentUser, triggerToast }: MarginReport
                         onClick={() => setSkuNamePrefix('')}
                         className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 font-black text-sm"
                       >
-                        ×
+                        Ã—
                       </button>
                     )}
                   </div>
@@ -847,9 +853,9 @@ export default function MarginReport({ currentUser, triggerToast }: MarginReport
                       <th className="py-3 px-4">Product Name</th>
                       <th className="py-3 px-4">Category</th>
                       <th className="py-3 px-4 text-right">Qty Ordered</th>
-                      <th className="py-3 px-4 text-right">Revenue (KES)</th>
-                      <th className="py-3 px-4 text-right">COGS Cost (KES)</th>
-                      <th className="py-3 px-4 text-right">Gross Profit (KES)</th>
+                      <th className="py-3 px-4 text-right">Revenue ({currencyCode})</th>
+                      <th className="py-3 px-4 text-right">COGS Cost ({currencyCode})</th>
+                      <th className="py-3 px-4 text-right">Gross Profit ({currencyCode})</th>
                       <th className="py-3 px-4 text-center">Margin %</th>
                     </tr>
                   </thead>
@@ -874,9 +880,9 @@ export default function MarginReport({ currentUser, triggerToast }: MarginReport
                               </span>
                             </td>
                             <td className="py-3.5 px-4 text-right text-slate-650">{item.qty_ordered.toLocaleString()} units</td>
-                            <td className="py-3.5 px-4 text-right text-slate-900 font-bold">{item.revenue_kes.toLocaleString()}</td>
-                            <td className="py-3.5 px-4 text-right text-slate-500">{item.cogs_kes.toLocaleString()}</td>
-                            <td className="py-3.5 px-4 text-right text-emerald-650 font-semibold">{item.profit_kes.toLocaleString()}</td>
+                            <td className="py-3.5 px-4 text-right text-slate-900 font-bold">{item.revenue_cents.toLocaleString()}</td>
+                            <td className="py-3.5 px-4 text-right text-slate-500">{item.cogs_cents.toLocaleString()}</td>
+                            <td className="py-3.5 px-4 text-right text-emerald-650 font-semibold">{item.profit_cents.toLocaleString()}</td>
                             <td className="py-3.5 px-4 text-center">
                               <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] border ${style.badge}`}>
                                 {item.margin_pct.toFixed(1)}%
@@ -896,9 +902,9 @@ export default function MarginReport({ currentUser, triggerToast }: MarginReport
                       <th className="py-3 px-4">Customer</th>
                       <th className="py-3 px-4 text-center">Date</th>
                       <th className="py-3 px-4 text-right">Units</th>
-                      <th className="py-3 px-4 text-right">Revenue (KES)</th>
-                      <th className="py-3 px-4 text-right">COGS Cost (KES)</th>
-                      <th className="py-3 px-4 text-right">Gross Profit (KES)</th>
+                      <th className="py-3 px-4 text-right">Revenue ({currencyCode})</th>
+                      <th className="py-3 px-4 text-right">COGS Cost ({currencyCode})</th>
+                      <th className="py-3 px-4 text-right">Gross Profit ({currencyCode})</th>
                       <th className="py-3 px-4 text-center">Margin %</th>
                     </tr>
                   </thead>
@@ -920,9 +926,9 @@ export default function MarginReport({ currentUser, triggerToast }: MarginReport
                               {new Date(item.created_at).toLocaleDateString()}
                             </td>
                             <td className="py-3.5 px-4 text-right text-slate-600">{item.qty_ordered} u</td>
-                            <td className="py-3.5 px-4 text-right text-slate-900 font-bold">{item.revenue_kes.toLocaleString()}</td>
-                            <td className="py-3.5 px-4 text-right text-slate-500">{item.cogs_kes.toLocaleString()}</td>
-                            <td className="py-3.5 px-4 text-right text-emerald-650 font-semibold">{item.profit_kes.toLocaleString()}</td>
+                            <td className="py-3.5 px-4 text-right text-slate-900 font-bold">{item.revenue_cents.toLocaleString()}</td>
+                            <td className="py-3.5 px-4 text-right text-slate-500">{item.cogs_cents.toLocaleString()}</td>
+                            <td className="py-3.5 px-4 text-right text-emerald-650 font-semibold">{item.profit_cents.toLocaleString()}</td>
                             <td className="py-3.5 px-4 text-center">
                               <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] border ${style.badge}`}>
                                 {item.margin_pct.toFixed(1)}%
@@ -942,3 +948,4 @@ export default function MarginReport({ currentUser, triggerToast }: MarginReport
     </div>
   );
 }
+

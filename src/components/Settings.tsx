@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { 
   Settings as SettingsIcon, Sliders, AlertTriangle, Key, ShieldAlert, CheckCircle2, 
   BookOpen, RotateCcw, Loader2, Globe, Sparkles, Building2, AlertCircle
@@ -12,7 +12,7 @@ interface ConfigInfo {
   notification_thresholds: {
     expiry_alert_days: number;
     delivery_late_hours: number;
-    write_off_high_value_kes: number;
+    write_off_high_value_cents: number;
   };
 }
 
@@ -55,7 +55,7 @@ export default function Settings({ triggerToast }: SettingsProps) {
       setTenantId(data.tenant_id || '');
       setExpiryAlertDays(data.notification_thresholds?.expiry_alert_days || 3);
       setDeliveryLateHours(data.notification_thresholds?.delivery_late_hours || 3);
-      setHighValueThreshold(data.notification_thresholds?.write_off_high_value_kes || 1000000);
+      setHighValueThreshold(data.notification_thresholds?.write_off_high_value_cents || 1000000);
       setConfiguredAt(data.configured_at || new Date().toISOString());
     } catch (err) {
       console.error('Error fetching admin config:', err);
@@ -103,7 +103,7 @@ export default function Settings({ triggerToast }: SettingsProps) {
       alert_prefs: {
         expiry_alert_days: expiryAlertDays,
         delivery_late_hours: deliveryLateHours,
-        write_off_high_value_kes: highValueThreshold
+        write_off_high_value_cents: highValueThreshold
       }
     };
 
@@ -276,7 +276,7 @@ export default function Settings({ triggerToast }: SettingsProps) {
               <details className="group border border-slate-200 rounded-xl p-3 bg-slate-50/50">
                 <summary className="text-[11px] font-bold text-slate-650 hover:text-slate-800 cursor-pointer list-none flex justify-between items-center">
                   <span>Advanced Settings parameters</span>
-                  <span className="transition duration-150 group-open:rotate-180">▼</span>
+                  <span className="transition duration-150 group-open:rotate-180">â–¼</span>
                 </summary>
                 <div className="pt-3 border-t mt-2 text-[11px] text-slate-500 space-y-2 leading-relaxed">
                   <p>
@@ -356,7 +356,7 @@ export default function Settings({ triggerToast }: SettingsProps) {
                 </div>
 
                 <div className="p-4 bg-slate-50/75 border rounded-xl space-y-2">
-                  <label className="block text-[11px] font-bold text-slate-905">High Value Write-Off threshold value (KES)</label>
+                  <label className="block text-[11px] font-bold text-slate-905">High Value Write-Off threshold value (cents)</label>
                   <p className="text-[10px] text-slate-400 mb-2">Triggers slack notification warnings for ledger losses exceeding this threshold.</p>
                   <input
                     type="number"
@@ -393,7 +393,7 @@ export default function Settings({ triggerToast }: SettingsProps) {
                     className="px-3.5 py-1.5 bg-white border hover:bg-slate-50 font-extrabold rounded-lg inline-flex items-center gap-1 min-h-[36px]"
                   >
                     <BookOpen className="h-3.5 w-3.5 text-teal-500" />
-                    <span>Open OpenAPI spec ↗</span>
+                    <span>Open OpenAPI spec â†—</span>
                   </a>
                 </div>
 
@@ -473,3 +473,4 @@ export default function Settings({ triggerToast }: SettingsProps) {
     </div>
   );
 }
+

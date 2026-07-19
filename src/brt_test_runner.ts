@@ -1,4 +1,4 @@
-import { TestResult, SKU, Batch, StockLedgerEntry, Location, User } from './types';
+﻿import { TestResult, SKU, Batch, StockLedgerEntry, Location, User } from './types';
 
 export async function runBrtTestSuite(db: any): Promise<TestResult[]> {
   const results: TestResult[] = [];
@@ -51,7 +51,7 @@ export async function runBrtTestSuite(db: any): Promise<TestResult[]> {
         name: 'Ledger Immutability',
         description: 'No ledger entry may be modified or deleted after creation. Corrections are made via reversing entries.',
         module: 'Inventory & Ledger'
-      }, 'failed', 'Server unreachable — real test could not run', logs);
+      }, 'failed', 'Server unreachable â€” real test could not run', logs);
     }
   })();
 
@@ -405,7 +405,7 @@ export async function runBrtTestSuite(db: any): Promise<TestResult[]> {
       approved_by: null,
       created_at: new Date().toISOString(),
       approved_at: null,
-      total_value_kes: 4500,
+      total_value_cents: 4500,
       notes: 'Audit test slip for BR-050'
     };
 
@@ -505,7 +505,7 @@ export async function runBrtTestSuite(db: any): Promise<TestResult[]> {
       logs.push('Rejected successfully: 422 TEMP_LOG_REQUIRED.');
     }
     
-    logs.push('Dispatching order with temp_log temperature 1.8°C...');
+    logs.push('Dispatching order with temp_log temperature 1.8Â°C...');
     addResult({
       id: 'BR-060',
       name: 'Temp Log on Dispatch Required',
@@ -517,7 +517,7 @@ export async function runBrtTestSuite(db: any): Promise<TestResult[]> {
   // BR-061: Temp Out of Range Warning
   (() => {
     const logs: string[] = ['Initiating BR-061 tests (Temp Out-of-Range Warning).'];
-    logs.push('Recording Chill dispatch log at temp 9°C (normal threshold: 0-4°C)...');
+    logs.push('Recording Chill dispatch log at temp 9Â°C (normal threshold: 0-4Â°C)...');
     logs.push('Dispatch NOT blocked (delivery must happen), but COLD_CHAIN_BREACH log event flagged.');
     addResult({
       id: 'BR-061',
@@ -576,3 +576,4 @@ export async function runBrtTestSuite(db: any): Promise<TestResult[]> {
 
   return results;
 }
+

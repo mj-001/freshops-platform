@@ -1,4 +1,4 @@
-import { jsPDF } from 'jspdf';
+﻿import { jsPDF } from 'jspdf';
 
 // Page layout dimensions for A4
 const PAGE_HEIGHT = 297;
@@ -129,7 +129,7 @@ function drawSignaturesAndFooters(
 /**
  * 1. Export 30-Day Cumulative Audit Ledger PDF
  */
-export function exportCumulativeAuditLedger(cycleCounts: any[], writeOffs: any[]): void {
+export function exportCumulativeAuditLedger(cycleCounts: any[], writeOffs: any[], currencyCode = 'KES'): void {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -157,11 +157,11 @@ export function exportCumulativeAuditLedger(cycleCounts: any[], writeOffs: any[]
   const completedCounts = cycleCounts.filter(cc => cc.status === 'completed').length;
   const totalWriteOffs = writeOffs.length;
   const resolvedWriteOffs = writeOffs.filter(wo => wo.status === 'approved' || wo.status === 'completed').length;
-  const totalWriteOffLossVal = writeOffs.reduce((sum, wo) => sum + (wo.total_value_kes || 0), 0);
+  const totalWriteOffLossVal = writeOffs.reduce((sum, wo) => sum + (wo.total_value_cents || 0), 0);
 
-  doc.text(`• Total scheduled audits mapped: ${totalCycleCounts} Cycle Count Sheets (${completedCounts} fully completed).`, MARGIN_LEFT + 5, y + 12);
-  doc.text(`• Total quarantine / waste slips filed: ${totalWriteOffs} Slips (${resolvedWriteOffs} authorized and written off).`, MARGIN_LEFT + 5, y + 16);
-  doc.text(`• Cumulative recorded financial loss: ${(totalWriteOffLossVal / 100).toLocaleString()} KES.`, MARGIN_LEFT + 5, y + 20);
+  doc.text(`â€¢ Total scheduled audits mapped: ${totalCycleCounts} Cycle Count Sheets (${completedCounts} fully completed).`, MARGIN_LEFT + 5, y + 12);
+  doc.text(`â€¢ Total quarantine / waste slips filed: ${totalWriteOffs} Slips (${resolvedWriteOffs} authorized and written off).`, MARGIN_LEFT + 5, y + 16);
+  doc.text(`â€¢ Cumulative recorded financial loss: ${(totalWriteOffLossVal / 100).toLocaleString()} KES.`, MARGIN_LEFT + 5, y + 20);
 
   y += 33;
 
@@ -294,7 +294,7 @@ export function exportCumulativeAuditLedger(cycleCounts: any[], writeOffs: any[]
       
       doc.setTextColor(190, 24, 74);
       doc.setFont('helvetica', 'bold');
-      doc.text(`${((wo.total_value_kes || 0) / 100).toLocaleString('en-KE')} KES`, MARGIN_LEFT + 75, y + 4.8);
+      doc.text(`${((wo.total_value_cents || 0) / 100).toLocaleString('en-KE')} ${currencyCode}`, MARGIN_LEFT + 75, y + 4.8);
 
       doc.setTextColor(15, 23, 42);
       doc.setFont('helvetica', 'normal');
@@ -323,7 +323,7 @@ export function exportCumulativeAuditLedger(cycleCounts: any[], writeOffs: any[]
 /**
  * 2. Export Detailed Single Cycle Count Slip Voucher
  */
-export function exportCycleCountVoucher(countSheet: any): void {
+export function exportCycleCountVoucher(countSheet: any, currencyCode = 'KES'): void {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -459,7 +459,7 @@ export function exportCycleCountVoucher(countSheet: any): void {
 /**
  * 3. Export Detailed Single Write-Off Voucher Slip
  */
-export function exportWriteOffVoucher(writeOff: any): void {
+export function exportWriteOffVoucher(writeOff: any, currencyCode = 'KES'): void {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -490,7 +490,7 @@ export function exportWriteOffVoucher(writeOff: any): void {
   doc.setFont('helvetica', 'normal');
   doc.text(`Total Deduction Value:`, MARGIN_LEFT + 110, y + 6);
   doc.setFont('helvetica', 'bold');
-  doc.text(`${((writeOff.total_value_kes || 0)/100).toLocaleString('en-KE')} KES`, MARGIN_LEFT + 145, y + 6);
+  doc.text(`${((writeOff.total_value_cents || 0)/100).toLocaleString('en-KE')} ${currencyCode}`, MARGIN_LEFT + 145, y + 6);
 
   doc.setFont('helvetica', 'normal');
   doc.text(`Compliance Status:`, MARGIN_LEFT + 110, y + 11);
@@ -557,8 +557,8 @@ export function exportWriteOffVoucher(writeOff: any): void {
       doc.text(`${line.qty} packs`, MARGIN_LEFT + 130, y + 5.2);
 
       doc.setTextColor(127, 29, 29);
-      const rowVal = ((line.value_kes || 0) / 100).toLocaleString('en-KE');
-      doc.text(`${rowVal} KES`, MARGIN_LEFT + 155, y + 5.2);
+      const rowVal = ((line.value_cents || 0) / 100).toLocaleString('en-KE');
+      doc.text(`${rowVal} ${currencyCode}`, MARGIN_LEFT + 155, y + 5.2);
 
       y += 7.5;
     });
@@ -573,3 +573,4 @@ export function exportWriteOffVoucher(writeOff: any): void {
 
   doc.save(`Silo_WriteOff_Voucher_${docId}.pdf`);
 }
+

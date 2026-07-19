@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'ops_manager' | 'receiver' | 'picker' | 'driver' | 'auditor';
+﻿export type Role = 'admin' | 'ops_manager' | 'receiver' | 'picker' | 'driver' | 'auditor';
 
 export type Permission =
   | 'receiving:view'
@@ -43,10 +43,10 @@ export interface User {
   name: string;
   email: string;
   phone: string | null;              // NEW
-  password_hash: string | null;      // NEW — null only for any pre-existing seed users
-  must_reset_password: boolean;      // NEW — true immediately after admin-created accounts
+  password_hash: string | null;      // NEW â€” null only for any pre-existing seed users
+  must_reset_password: boolean;      // NEW â€” true immediately after admin-created accounts
   role: Role;
-  custom_role_id?: string | null;   // NEW — when set, this user's
+  custom_role_id?: string | null;   // NEW â€” when set, this user's
                                      // permissions come from the
                                      // referenced CustomRole instead
                                      // of the legacy role-based
@@ -56,7 +56,7 @@ export interface User {
   is_active: boolean;
   created_at: string;
   last_login_at: string | null;
-  reports_to_user_id: string | null;  // NEW — the user's direct
+  reports_to_user_id: string | null;  // NEW â€” the user's direct
                                         // line manager. Used by the
                                         // WorkflowApproval engine to
                                         // determine stage-1 approvers
@@ -153,7 +153,7 @@ export interface Category {
   expiry_alert_days: number | null; // null = use system default
   requires_barcode?: boolean;
   default_product_class?: ProductClass | null;
-  numeric_code: number;   // NEW — 3-digit prefix used to build
+  numeric_code: number;   // NEW â€” 3-digit prefix used to build
                            // product codes. Top-level categories
                            // use multiples of 100 (100, 200, 300...).
                            // Sub-categories use the parent's base
@@ -164,10 +164,10 @@ export type PublicationStatus =
   | 'draft'      // created, not yet ready for sale
   | 'ready'      // readiness checks passed, awaiting publish decision
   | 'published'  // live and available for ordering
-  | 'blocked'    // NEW — pulled from sale pending investigation.
+  | 'blocked'    // NEW â€” pulled from sale pending investigation.
                  // Stock continues to be tracked and counted normally
                  // at its bin location. Item not orderable.
-  | 'delisted'   // NEW — permanently removed from active catalogue.
+  | 'delisted'   // NEW â€” permanently removed from active catalogue.
                  // Stock tracked until exhausted, then archived.
   | 'archived';  // kept for backward compatibility with existing data
 
@@ -188,11 +188,11 @@ export interface SKU {
   shelf_life_days: number;
   reorder_level: number;
   reorder_qty: number;
-  moq: number;            // NEW — supplier's minimum order quantity
+  moq: number;            // NEW â€” supplier's minimum order quantity
                            // in supplier units. Defaults to 1.
                            // Must be respected when creating POs.
-  cost_price_kes: number; // in cents
-  selling_price_kes: number; // in cents
+  cost_price_cents: number; // in cents
+  selling_price_cents: number; // in cents
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -289,7 +289,7 @@ export interface PurchaseOrderLine {
   sku_id: string;
   qty_ordered: number;
   qty_received: number;
-  unit_cost_kes: number;
+  unit_cost_cents: number;
   bom_linked?: boolean;
 }
 
@@ -316,14 +316,14 @@ export interface GoodsReceiptLine {
   put_away_location_id: string | null;
   put_away_at: string | null;
   put_away_by: string | null;
-  actual_unit_cost_kes: number | null;    // NEW — what supplier
+  actual_unit_cost_cents: number | null;    // NEW â€” what supplier
                                            // actually invoiced.
                                            // null = matched PO price
-  price_variance_kes: number | null;      // NEW — actual minus PO
+  price_variance_cents: number | null;      // NEW â€” actual minus PO
                                            // price. Positive = supplier
                                            // charged more. null = no
                                            // variance.
-  variance_workflow_id: string | null;    // NEW — WorkflowApproval id
+  variance_workflow_id: string | null;    // NEW â€” WorkflowApproval id
                                            // if variance triggered an
                                            // approval
 }
@@ -341,13 +341,13 @@ export type PriceChangeReason =
 export interface PriceHistory {
   id: string;
   sku_id: string;
-  effective_from: string;       // ISO — date this price took effect.
+  effective_from: string;       // ISO â€” date this price took effect.
                                  // For variance approvals, this is
                                  // set to the GRN receipt date of the
                                  // specific PO that had the variance,
                                  // NOT today's date.
-  cost_price_kes: number;        // in cents
-  selling_price_kes: number;     // in cents
+  cost_price_cents: number;        // in cents
+  selling_price_cents: number;     // in cents
   reason: PriceChangeReason;
   notes: string | null;
   changed_by: string;
@@ -437,7 +437,7 @@ export interface CustomerOrder {
   status: CustomerOrderStatus;
   delivery_date: string;
   delivery_address: string;
-  total_value_kes: number;
+  total_value_cents: number;
   notes: string | null;
   delivery_zone: string | null;
   dispatch_sequence: number | null;
@@ -456,7 +456,7 @@ export interface CustomerOrderLine {
   sku_id: string;
   qty_ordered: number;
   qty_fulfilled: number;
-  unit_price_kes: number;
+  unit_price_cents: number;
 }
 
 export interface Customer {
@@ -469,8 +469,8 @@ export interface Customer {
   customer_type: 'b2c' | 'b2b';
   company_name: string | null;
   payment_terms: 'cash' | 'net_7' | 'net_14' | 'net_30';
-  credit_limit_kes: number | null;
-  outstanding_balance_kes: number;
+  credit_limit_cents: number | null;
+  outstanding_balance_cents: number;
   created_at: string;
 }
 
@@ -608,7 +608,7 @@ export interface WriteOff {
   approved_by: string | null;
   created_at: string;
   approved_at: string | null;
-  total_value_kes: number;
+  total_value_cents: number;
   notes: string | null;
 }
 
@@ -622,7 +622,7 @@ export interface WriteOffLine {
   location_id: string;
   qty: number;
   reason: WriteOffReason;
-  value_kes: number;
+  value_cents: number;
   notes: string | null;
 }
 
@@ -668,14 +668,14 @@ export interface AssetType {
   id: string;
   name: string;              // fully operator-defined. e.g. 'Cooler Box',
                               // 'Insulated Tote', 'Hanging Rail', 'Crate',
-                              // 'Proving Basket' — whatever the operator uses.
-                              // No defaults shipped — admin creates these.
+                              // 'Proving Basket' â€” whatever the operator uses.
+                              // No defaults shipped â€” admin creates these.
   description: string | null;
   requires_uid: boolean;     // true = each individual asset of this type
                               // gets its own UID/barcode/QR tag for
                               // individual tracking.
                               // false = tracked as a pool (e.g. "we have
-                              // 40 of these, 12 are out") — no individual
+                              // 40 of these, 12 are out") â€” no individual
                               // identity per unit.
   is_active: boolean;
   created_by: string;
@@ -746,7 +746,7 @@ export interface AssetEvent {
                               // damaged_reported)
 
   // Reference to the system document that caused this event.
-  // This is the key audit field — any event triggered by an order,
+  // This is the key audit field â€” any event triggered by an order,
   // replenishment, transfer, or repair job must carry a reference
   // so you can look at any asset and see its full document trail,
   // or look at any order and see which assets went with it.
@@ -755,7 +755,7 @@ export interface AssetEvent {
   reference_type: 'customer_order' | 'replenishment_order' |
                   'transfer' | 'repair_job' | 'manual' | null;
 
-  // Pool quantity (for non-UID assets — how many units of this type
+  // Pool quantity (for non-UID assets â€” how many units of this type
   // were involved in this event)
   qty: number;               // always 1 for individually-tracked assets.
                               // for pool assets: how many units moved.
@@ -786,7 +786,7 @@ export interface DeliveryAsset {
 export interface PackingAsset {
   id: string;
   order_id: string;
-  asset_type_id: string;     // references AssetType.id — operator-defined
+  asset_type_id: string;     // references AssetType.id â€” operator-defined
   asset_type_name: string;   // denormalised display name at time of recording
                               // (so the packing record remains readable even
                               // if the AssetType is later renamed)
@@ -811,7 +811,7 @@ export interface ProductRecall {
     units_in_transit: number;
     units_delivered: number;
     customers_affected: number;
-    estimated_value_kes: number;
+    estimated_value_cents: number;
   };
   customers_to_contact: {
     customer_id: string;
@@ -919,7 +919,7 @@ export interface ProductionRecipe {
   output_sku_id: string;
   output_qty_per_batch: number;  // base units output per batch
   components: BomComponent[];
-  standard_cost_kes: number;     // auto-computed from component costs
+  standard_cost_cents: number;     // auto-computed from component costs
   approved_by: string | null;
   approved_at: string | null;
   created_by: string;
@@ -953,9 +953,9 @@ export interface ProductionRun {
   output_qty_actual: number | null;
   output_batch_id: string | null;
   output_expiry_date: string | null;
-  standard_cost_kes: number;
-  actual_cost_kes: number | null;
-  cost_variance_kes: number | null;
+  standard_cost_cents: number;
+  actual_cost_cents: number | null;
+  cost_variance_cents: number | null;
   initiated_by: string;
   scheduled_start: string;
   actual_start: string | null;
@@ -977,7 +977,7 @@ export interface ManifestLine {
   batch_number: string;
   expiry_date: string;
   qty_manifested: number;          // base units
-  qty_received: number | null;     // base units — set during receiving
+  qty_received: number | null;     // base units â€” set during receiving
   variance: number | null;
   from_location_id: string | null;
   to_location_id: string | null;
@@ -1031,11 +1031,11 @@ export type RejectionReason =
   | 'QUANTITY_DISCREPANCY';
 
 export type DispositionType =
-  | 'RETURN_TO_SOURCE'        // returnable — goes back to RGN
-  | 'WRITE_OFF_AT_FP'         // non-returnable — disposed at FP
-  | 'MARKDOWN_SALE'           // borderline quality — quick sale at FP
+  | 'RETURN_TO_SOURCE'        // returnable â€” goes back to RGN
+  | 'WRITE_OFF_AT_FP'         // non-returnable â€” disposed at FP
+  | 'MARKDOWN_SALE'           // borderline quality â€” quick sale at FP
   | 'DONATE'                  // safe but not sellable
-  | 'ACCEPT_AS_RECEIVED';     // wrong product but sellable — stays at FP
+  | 'ACCEPT_AS_RECEIVED';     // wrong product but sellable â€” stays at FP
 
 export interface FPORejectionLine {
   id: string;
@@ -1050,11 +1050,11 @@ export interface FPORejectionLine {
   rejection_reason: RejectionReason;
   is_returnable: boolean;
   disposition: DispositionType;
-  actual_sku_id: string | null;    // for ACCEPT_AS_RECEIVED — what actually arrived
+  actual_sku_id: string | null;    // for ACCEPT_AS_RECEIVED â€” what actually arrived
   actual_sku_name: string | null;
   actual_batch_id: string | null;  // new batch created at FP for actual SKU
   disposition_notes: string | null;
-  markdown_price_kes: number | null;
+  markdown_price_cents: number | null;
   donate_recipient: string | null;
   write_off_id: string | null;
   recorded_by: string;
@@ -1075,7 +1075,7 @@ export interface FPOClosureReport {
     reason: RejectionReason;
     line_count: number;
     qty_rejected: number;
-    value_kes: number;
+    value_cents: number;
   }[];
   returning_to_source: FPORejectionLine[];
   written_off_at_fp: FPORejectionLine[];
@@ -1086,7 +1086,7 @@ export interface FPOClosureReport {
   under_pick_lines: FPORejectionLine[];
 }
 
-// Replaces batch-level locking — reserves specific qty at destination
+// Replaces batch-level locking â€” reserves specific qty at destination
 export interface StockReservation {
   id: string;
   sku_id: string;
@@ -1113,8 +1113,8 @@ export interface ReplenishmentRule {
   id: string;
   sku_id: string;
   fulfilment_warehouse_id: string;
-  par_level: number;             // base units — minimum to maintain
-  reorder_qty: number;           // base units — how much to send when below par
+  par_level: number;             // base units â€” minimum to maintain
+  reorder_qty: number;           // base units â€” how much to send when below par
   is_active: boolean;
   created_by: string;
   created_at: string;
@@ -1179,8 +1179,8 @@ export interface MarkdownApproval {
     rejection_reason: string | null;
     fpo_id: string | null;
   };
-  proposed_markdown_price_kes?: number;   // in KES cents
-  original_price_kes?: number;
+  proposed_markdown_price_cents?: number;   // in KES cents
+  original_price_cents?: number;
   discount_pct?: number;
   status: MarkdownApprovalStatus;
   raised_by?: string;               // user id
@@ -1192,7 +1192,7 @@ export interface MarkdownApproval {
 
   // Write-off dual-approval properties
   write_off_id?: string;
-  total_value_kes?: number;
+  total_value_cents?: number;
   reviewed_by?: string | null;
   reviewed_at?: string | null;
   feedback?: string | null;
@@ -1262,15 +1262,15 @@ export interface SetupConfig {
   configured_by_email: string;
 }
 
-// SECTION 1 — CUSTOMER RETURNS
+// SECTION 1 â€” CUSTOMER RETURNS
 export type ReturnType =
   | 'doorstep_rejection'    // driver still at door, items in van
   | 'post_delivery'         // reported after delivery completed
   | 'driver_error';         // wrong address or items left incorrectly
 
 export type ReturnLineDisposition =
-  | 'RESTOCK'               // ambient/sealed/cold chain verified — back to stock
-  | 'WRITE_OFF'             // cannot restock — fresh/temp-sensitive
+  | 'RESTOCK'               // ambient/sealed/cold chain verified â€” back to stock
+  | 'WRITE_OFF'             // cannot restock â€” fresh/temp-sensitive
   | 'SUPPLIER_CLAIM'        // quality issue traceable to supplier
   | 'CREDIT_ONLY';          // quality issue, no physical return needed
 
@@ -1296,7 +1296,7 @@ export interface CustomerReturnLine {
   disposition: ReturnLineDisposition | null;
   restocked_to_location_id: string | null;
   write_off_id: string | null;
-  credit_value_kes: number;       // KES cents
+  credit_value_cents: number;       // KES cents
   inspected_by: string | null;
   inspected_at: string | null;
 }
@@ -1323,14 +1323,14 @@ export interface CustomerReturn {
   received_at: string | null;
   receipt_temp_celsius: number | null;
   lines: CustomerReturnLine[];
-  total_credit_value_kes: number;
+  total_credit_value_cents: number;
   credit_issued: boolean;
   credit_issued_at: string | null;
   closed_at: string | null;
   notes: string | null;
 }
 
-// SECTION 2 — CATALOGUE / PIM GATE
+// SECTION 2 â€” CATALOGUE / PIM GATE
 export interface VendorCard {
   id: string;
   sku_id: string;
@@ -1340,7 +1340,7 @@ export interface VendorCard {
   units_per_supplier_unit: number;
   moq: number;                    // minimum order quantity in supplier units
   lead_time_days: number;
-  price_kes: number;              // per supplier unit, KES cents
+  price_cents: number;              // per supplier unit, KES cents
   is_preferred: boolean;
   is_active: boolean;
   notes: string | null;
@@ -1348,7 +1348,7 @@ export interface VendorCard {
   created_at: string;
 }
 
-// SECTION 3 — CROSS-DOCK EOD ZERO CHECK
+// SECTION 3 â€” CROSS-DOCK EOD ZERO CHECK
 export type CarryForwardReason =
   | 'DEMAND_SHORTFALL'            // stock transferred but not enough orders
   | 'DELIVERY_FAILED'             // orders existed but deliveries failed
@@ -1364,10 +1364,10 @@ export interface CrossDockEODCheck {
   status: 'pending' | 'completed';
   lines: CrossDockEODLine[];
   sellthrough_rate_pct: number | null;  // computed on completion
-  total_transferred_kes: number;
-  total_sold_kes: number;
-  total_carried_forward_kes: number;
-  total_written_off_kes: number;
+  total_transferred_cents: number;
+  total_sold_cents: number;
+  total_carried_forward_cents: number;
+  total_written_off_cents: number;
 }
 
 export interface CrossDockEODLine {
@@ -1387,7 +1387,7 @@ export interface CrossDockEODLine {
   write_off_id: string | null;
 }
 
-// SECTION 4 — WAREHOUSE ZONING RULES
+// SECTION 4 â€” WAREHOUSE ZONING RULES
 export interface ZoningSeparationRule {
   id: string;
   warehouse_id: string;
@@ -1409,13 +1409,13 @@ export interface CountingSection {
   warehouse_id: string;    // which warehouse this section belongs to
   name: string;            // fully operator-defined. No defaults.
                            // Examples: 'Chiller', 'Cold Room A',
-                           // 'Dry Store', 'Butchery', 'Bakery' —
+                           // 'Dry Store', 'Butchery', 'Bakery' â€”
                            // whatever the operator's physical layout is.
   icon: string;            // lucide icon name, e.g. 'Thermometer',
                            // 'Package', 'Snowflake', 'Leaf', 'FlaskConical'
                            // Admin picks from a curated list in the UI.
   zone_ids: string[];      // which zone IDs belong to this section.
-                           // Can be empty — admin links zones to sections
+                           // Can be empty â€” admin links zones to sections
                            // when setting up. Counting works even before
                            // zones are linked.
   bin_prefix: string | null; // optional: items in bins whose code starts
@@ -1427,7 +1427,7 @@ export interface CountingSection {
                                // 'status:blocked', 'status:delisted'.
                                // When set, items matching this filter are
                                // surfaced in the count view ALONGSIDE normal
-                               // items — counting still happens at bin
+                               // items â€” counting still happens at bin
                                // location, not separately. null = no filter.
   display_order: number;   // controls section grid sort order
   is_active: boolean;
@@ -1458,6 +1458,7 @@ export interface DbState {
   asset_types: AssetType[];
   asset_events: AssetEvent[];
 }
+
 
 
 

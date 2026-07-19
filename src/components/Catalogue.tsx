@@ -1,5 +1,6 @@
-// src/components/Catalogue.tsx
+﻿// src/components/Catalogue.tsx
 import React, { useEffect, useState } from 'react';
+import { useCurrency } from '../hooks/useCurrency';
 import * as XLSX from 'xlsx';
 import { 
   BookOpen, 
@@ -142,8 +143,8 @@ const initialNewProductState = {
   display_divisor: 1,
   display_decimals: 0,
   // Section 2 pricing and duration
-  cost_price_kes: '',
-  selling_price_kes: '',
+  cost_price_cents: '',
+  selling_price_cents: '',
   shelf_life_days: '',
   // Section 3 limits
   reorder_level: '0',
@@ -164,6 +165,7 @@ interface CatalogueProps {
 }
 
 export default function Catalogue({ currentUser, triggerToast }: CatalogueProps) {
+  const { currencyCode } = useCurrency();
   const [activeView, setActiveView] = useState<'catalogue' | 'report'>('catalogue');
   const [loading, setLoading] = useState<boolean>(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -204,7 +206,7 @@ export default function Catalogue({ currentUser, triggerToast }: CatalogueProps)
     units_per_supplier_unit: 1,
     moq: 1,
     lead_time_days: 1,
-    price_kes_full: 0, // In standard KES (converted to cents on save)
+    price_cents_full: 0, // In standard KES (converted to cents on save)
     is_preferred: false,
     notes: ''
   });
@@ -292,8 +294,8 @@ export default function Catalogue({ currentUser, triggerToast }: CatalogueProps)
       temp_zone: !!sku.temp_zone,
       unit: !!sku.display_unit || !!sku.unit,
       shelf_life: sku.shelf_life_days > 0,
-      selling_price: sku.selling_price_kes > 0,
-      cost_price: sku.cost_price_kes > 0,
+      selling_price: sku.selling_price_cents > 0,
+      cost_price: sku.cost_price_cents > 0,
       images: !!(sku.image_urls && sku.image_urls.length > 0),
       vendor: vcs.some(vc => vc.sku_id === sku.id && vc.is_preferred)
     };
@@ -345,7 +347,7 @@ export default function Catalogue({ currentUser, triggerToast }: CatalogueProps)
         triggerToast(json?.error?.message || 'Failed to update SKU on server', 'error');
       }
     } catch {
-      triggerToast('Updating SKU failed — check configuration.', 'error');
+      triggerToast('Updating SKU failed â€” check configuration.', 'error');
     }
   };
 
@@ -383,7 +385,7 @@ export default function Catalogue({ currentUser, triggerToast }: CatalogueProps)
       }
       triggerToast(json?.error?.message || 'Failed to update status', 'error');
     } catch {
-      triggerToast('Updating status failed — check connection.', 'error');
+      triggerToast('Updating status failed â€” check connection.', 'error');
     }
   };
 
@@ -398,7 +400,7 @@ export default function Catalogue({ currentUser, triggerToast }: CatalogueProps)
         triggerToast(json?.error?.message || 'Archiving failed', 'error');
       }
     } catch {
-      triggerToast('Archiving failed — check your connection.', 'error');
+      triggerToast('Archiving failed â€” check your connection.', 'error');
     }
   };
 
@@ -431,7 +433,7 @@ export default function Catalogue({ currentUser, triggerToast }: CatalogueProps)
       units_per_supplier_unit: newCard.units_per_supplier_unit,
       moq: newCard.moq,
       lead_time_days: newCard.lead_time_days,
-      price_kes: Math.round(newCard.price_kes_full * 100), // convert to cents
+      price_cents: Math.round(newCard.price_cents_full * 100), // convert to cents
       is_preferred: newCard.is_preferred,
       is_active: true,
       notes: newCard.notes || null,
@@ -471,7 +473,7 @@ export default function Catalogue({ currentUser, triggerToast }: CatalogueProps)
       units_per_supplier_unit: 1,
       moq: 1,
       lead_time_days: 1,
-      price_kes_full: 0,
+      price_cents_full: 0,
       is_preferred: false,
       notes: ''
     });
@@ -591,14 +593,14 @@ export default function Catalogue({ currentUser, triggerToast }: CatalogueProps)
     if (!newProduct.temp_zone) errors.temp_zone = 'Temperature zone setting is required';
     if (!newProduct.unit) errors.unit = 'Core unit designation is required';
 
-    const costPriceVal = parseFloat(newProduct.cost_price_kes);
-    if (!newProduct.cost_price_kes || isNaN(costPriceVal) || costPriceVal <= 0) {
-      errors.cost_price_kes = 'Cost price is required and must be greater than 0';
+    const costPriceVal = parseFloat(newProduct.cost_price_cents);
+    if (!newProduct.cost_price_cents || isNaN(costPriceVal) || costPriceVal <= 0) {
+      errors.cost_price_cents = 'Cost price is required and must be greater than 0';
     }
 
-    const sellingPriceVal = parseFloat(newProduct.selling_price_kes);
-    if (!newProduct.selling_price_kes || isNaN(sellingPriceVal) || sellingPriceVal <= 0) {
-      errors.selling_price_kes = 'Selling price is required and must be greater than 0';
+    const sellingPriceVal = parseFloat(newProduct.selling_price_cents);
+    if (!newProduct.selling_price_cents || isNaN(sellingPriceVal) || sellingPriceVal <= 0) {
+      errors.selling_price_cents = 'Selling price is required and must be greater than 0';
     }
 
     const shelfLifeVal = parseInt(newProduct.shelf_life_days);
@@ -637,8 +639,8 @@ export default function Catalogue({ currentUser, triggerToast }: CatalogueProps)
         display_decimals: Number(newProduct.display_decimals),
 
         // Cost and selling prices converted to cents!
-        cost_price_kes: Math.round(costPriceVal * 100),
-        selling_price_kes: Math.round(sellingPriceVal * 100),
+        cost_price_cents: Math.round(costPriceVal * 100),
+        selling_price_cents: Math.round(sellingPriceVal * 100),
 
         // Shelf life / stock requirements
         shelf_life_days: Number(shelfLifeVal),
@@ -1213,7 +1215,7 @@ export default function Catalogue({ currentUser, triggerToast }: CatalogueProps)
                           <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-950 font-semibold text-xs flex gap-2">
                             <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
                             <div>
-                              <span className="font-black block">Almost ready — {missing.length} Missing</span>
+                              <span className="font-black block">Almost ready â€” {missing.length} Missing</span>
                               <p className="text-[10px] opacity-90 leading-normal mt-0.5">Please resolve the checklist gaps listed below before publishing.</p>
                             </div>
                           </div>
@@ -1221,7 +1223,7 @@ export default function Catalogue({ currentUser, triggerToast }: CatalogueProps)
                           <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-950 font-semibold text-xs flex gap-2">
                             <AlertTriangle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
                             <div>
-                              <span className="font-black block">Incomplete — {missing.length} Items Needed</span>
+                              <span className="font-black block">Incomplete â€” {missing.length} Items Needed</span>
                               <p className="text-[10px] opacity-90 leading-normal mt-0.5">A minimum score of 100% is required to clear this SKU for active publication.</p>
                             </div>
                           </div>
@@ -1396,7 +1398,7 @@ export default function Catalogue({ currentUser, triggerToast }: CatalogueProps)
                                   </div>
 
                                   <div className="grid grid-cols-2 gap-x-2 text-[10.5px] text-slate-500 font-mono">
-                                    <span>Price: <strong>KES {(card.price_kes / 100).toLocaleString()}</strong></span>
+                                    <span>Price: <strong>KES {(card.price_cents / 100).toLocaleString()}</strong></span>
                                     <span>MOQ: <strong>{card.moq} {card.supplier_unit}s</strong></span>
                                     <span>Lead: <strong>{card.lead_time_days} days</strong></span>
                                     <span>Capacity: <strong>{card.units_per_supplier_unit} base/unit</strong></span>
@@ -1451,11 +1453,11 @@ export default function Catalogue({ currentUser, triggerToast }: CatalogueProps)
                                 />
                               </div>
                               <div>
-                                <label className="text-[10px] text-slate-450 font-bold block mb-1">Price KES (standard)</label>
+                                <label className="text-[10px] text-slate-450 font-bold block mb-1">Price {currencyCode} (standard)</label>
                                 <input
                                   type="number"
-                                  value={newCard.price_kes_full}
-                                  onChange={(e) => setNewCard(p => ({ ...p, price_kes_full: parseFloat(e.target.value) || 0 }))}
+                                  value={newCard.price_cents_full}
+                                  onChange={(e) => setNewCard(p => ({ ...p, price_cents_full: parseFloat(e.target.value) || 0 }))}
                                   className="w-full border p-1 rounded text-xs"
                                 />
                               </div>
@@ -1521,8 +1523,8 @@ export default function Catalogue({ currentUser, triggerToast }: CatalogueProps)
                           <PriceHistoryPanel
                             skuId={selectedSku.id}
                             skuName={selectedSku.name}
-                            currentCostPrice={selectedSku.cost_price_kes}
-                            currentSellingPrice={selectedSku.selling_price_kes}
+                            currentCostPrice={selectedSku.cost_price_cents}
+                            currentSellingPrice={selectedSku.selling_price_cents}
                             currentUser={currentUser}
                             triggerToast={triggerToast}
                             onPriceChanged={() => {
@@ -1730,10 +1732,10 @@ export default function Catalogue({ currentUser, triggerToast }: CatalogueProps)
             {/* Form Content */}
             <form onSubmit={handleCreateProductSubmit} className="p-5 space-y-6 flex-1 overflow-y-auto">
               
-              {/* SECTION 1 — Basics */}
+              {/* SECTION 1 â€” Basics */}
               <div className="space-y-4">
                 <h3 className="text-[10px] font-black uppercase tracking-wider text-slate-450 border-b border-slate-100 pb-1">
-                  Section 1 — Basics
+                  Section 1 â€” Basics
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Product Name */}
@@ -1865,10 +1867,10 @@ export default function Catalogue({ currentUser, triggerToast }: CatalogueProps)
                 </div>
               </div>
 
-              {/* SECTION 2 — Unit & Pricing */}
+              {/* SECTION 2 â€” Unit & Pricing */}
               <div className="space-y-4">
                 <h3 className="text-[10px] font-black uppercase tracking-wider text-slate-450 border-b border-slate-100 pb-1">
-                  Section 2 — Unit & Pricing
+                  Section 2 â€” Unit & Pricing
                 </h3>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1897,7 +1899,7 @@ export default function Catalogue({ currentUser, triggerToast }: CatalogueProps)
                     onClick={() => setIsUnitConfigExpanded(!isUnitConfigExpanded)}
                     className="text-[10.5px] font-extrabold text-teal-600 hover:text-teal-700 flex items-center gap-1 cursor-pointer min-h-[44px]"
                   >
-                    <span>{isUnitConfigExpanded ? '▼ Hide' : '▶ Customise'} detailed unit variables (Auto-loaded via preset)</span>
+                    <span>{isUnitConfigExpanded ? 'â–¼ Hide' : 'â–¶ Customise'} detailed unit variables (Auto-loaded via preset)</span>
                   </button>
 
                   {isUnitConfigExpanded && (
@@ -1997,40 +1999,40 @@ export default function Catalogue({ currentUser, triggerToast }: CatalogueProps)
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* Cost Price KES */}
+                  {/* Cost Price */}
                   <div>
-                    <label className="text-[10px] font-black uppercase tracking-wider text-slate-700 block mb-1">Cost Price (KES) <span className="text-rose-500">*</span></label>
+                    <label className="text-[10px] font-black uppercase tracking-wider text-slate-700 block mb-1">Cost Price ({currencyCode}) <span className="text-rose-500">*</span></label>
                     <input
                       type="number"
                       step="0.01"
                       required
-                      value={newProduct.cost_price_kes}
+                      value={newProduct.cost_price_cents}
                       onChange={(e) => {
-                        setNewProduct(p => ({ ...p, cost_price_kes: e.target.value }));
-                        if (formErrors.cost_price_kes) setFormErrors(errs => { const next = { ...errs }; delete next.cost_price_kes; return next; });
+                        setNewProduct(p => ({ ...p, cost_price_cents: e.target.value }));
+                        if (formErrors.cost_price_cents) setFormErrors(errs => { const next = { ...errs }; delete next.cost_price_cents; return next; });
                       }}
                       placeholder="e.g. 450.50"
-                      className={`w-full px-3 py-2 border rounded-xl text-xs outline-hidden focus:border-slate-400 ${formErrors.cost_price_kes ? 'border-rose-400 bg-rose-50/20' : 'border-slate-200'}`}
+                      className={`w-full px-3 py-2 border rounded-xl text-xs outline-hidden focus:border-slate-400 ${formErrors.cost_price_cents ? 'border-rose-400 bg-rose-50/20' : 'border-slate-200'}`}
                     />
-                    {formErrors.cost_price_kes && <span className="text-[10px] text-rose-500 mt-1 block font-medium">{formErrors.cost_price_kes}</span>}
+                    {formErrors.cost_price_cents && <span className="text-[10px] text-rose-500 mt-1 block font-medium">{formErrors.cost_price_cents}</span>}
                   </div>
 
-                  {/* Selling Price KES */}
+                  {/* Selling Price */}
                   <div>
-                    <label className="text-[10px] font-black uppercase tracking-wider text-slate-700 block mb-1">Selling Price (KES) <span className="text-rose-500">*</span></label>
+                    <label className="text-[10px] font-black uppercase tracking-wider text-slate-700 block mb-1">Selling Price ({currencyCode}) <span className="text-rose-500">*</span></label>
                     <input
                       type="number"
                       step="0.01"
                       required
-                      value={newProduct.selling_price_kes}
+                      value={newProduct.selling_price_cents}
                       onChange={(e) => {
-                        setNewProduct(p => ({ ...p, selling_price_kes: e.target.value }));
-                        if (formErrors.selling_price_kes) setFormErrors(errs => { const next = { ...errs }; delete next.selling_price_kes; return next; });
+                        setNewProduct(p => ({ ...p, selling_price_cents: e.target.value }));
+                        if (formErrors.selling_price_cents) setFormErrors(errs => { const next = { ...errs }; delete next.selling_price_cents; return next; });
                       }}
                       placeholder="e.g. 599.00"
-                      className={`w-full px-3 py-2 border rounded-xl text-xs outline-hidden focus:border-slate-400 ${formErrors.selling_price_kes ? 'border-rose-400 bg-rose-50/20' : 'border-slate-200'}`}
+                      className={`w-full px-3 py-2 border rounded-xl text-xs outline-hidden focus:border-slate-400 ${formErrors.selling_price_cents ? 'border-rose-400 bg-rose-50/20' : 'border-slate-200'}`}
                     />
-                    {formErrors.selling_price_kes && <span className="text-[10px] text-rose-500 mt-1 block font-medium">{formErrors.selling_price_kes}</span>}
+                    {formErrors.selling_price_cents && <span className="text-[10px] text-rose-500 mt-1 block font-medium">{formErrors.selling_price_cents}</span>}
                   </div>
 
                   {/* Shelf Life Days */}
@@ -2052,10 +2054,10 @@ export default function Catalogue({ currentUser, triggerToast }: CatalogueProps)
                 </div>
               </div>
 
-              {/* SECTION 3 — Stock Planning */}
+              {/* SECTION 3 â€” Stock Planning */}
               <div className="space-y-4">
                 <h3 className="text-[10px] font-black uppercase tracking-wider text-slate-450 border-b border-slate-100 pb-1">
-                  Section 3 — Stock Planning
+                  Section 3 â€” Stock Planning
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {/* Reorder Level */}
@@ -2099,7 +2101,7 @@ export default function Catalogue({ currentUser, triggerToast }: CatalogueProps)
                 </div>
               </div>
 
-              {/* SECTION 4 — Advanced */}
+              {/* SECTION 4 â€” Advanced */}
               <div className="space-y-4">
                 <div className="border-t border-slate-100 pt-3">
                   <button
@@ -2107,7 +2109,7 @@ export default function Catalogue({ currentUser, triggerToast }: CatalogueProps)
                     onClick={() => setIsAdvancedExpanded(!isAdvancedExpanded)}
                     className="text-[10.5px] font-extrabold text-teal-600 hover:text-teal-700 flex items-center gap-1 cursor-pointer min-h-[44px]"
                   >
-                    <span>{isAdvancedExpanded ? '▼ Hide' : '▶ Show'} Advanced Configuration (Optional parameters)</span>
+                    <span>{isAdvancedExpanded ? 'â–¼ Hide' : 'â–¶ Show'} Advanced Configuration (Optional parameters)</span>
                   </button>
                 </div>
 
@@ -2564,3 +2566,4 @@ export default function Catalogue({ currentUser, triggerToast }: CatalogueProps)
     </div>
   );
 }
+
