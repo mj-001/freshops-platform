@@ -401,11 +401,11 @@ function runDefensiveMigrations() {
         }
       });
 
-      // Backfill reports_to_user_id on existing users
+      // Backfill reports_to_user_id, granted_permissions, revoked_permissions
       (db.users || []).forEach((u: any) => {
-        if (u.reports_to_user_id === undefined) {
-          u.reports_to_user_id = null;
-        }
+        if (u.reports_to_user_id === undefined) u.reports_to_user_id = null;
+        if (!u.granted_permissions) u.granted_permissions = [];
+        if (!u.revoked_permissions) u.revoked_permissions = [];
       });
 
       // Backfill actual_unit_cost_kes etc. on existing GRN lines
@@ -770,23 +770,19 @@ function getPriceAtDate(skuId: string, asOfDate: string) {
 
 function userHasPermission(user: User | null | undefined, permission: Permission): boolean {
   if (!user) return false;
-  // Admins always have every permission, custom role or not.
+  // 1. Admins always have every permission, no overrides needed.
   if (user.role === 'admin') return true;
-  // If this user has a custom role assigned, their permissions
-  // come ENTIRELY from that custom role — the legacy `role` field
-  // becomes just a display/badge label, not the permission source,
-  // for users with a custom_role_id set.
+  // 2. Per-user revoke takes priority over everything else.
+  if ((user.revoked_permissions || []).includes(permission)) return false;
+  // 3. Per-user grant overrides role/custom-role.
+  if ((user.granted_permissions || []).includes(permission)) return true;
+  // 4. Custom role check.
   if (user.custom_role_id) {
     const customRole = (db.custom_roles || []).find(r => r.id === user.custom_role_id);
     return customRole ? customRole.permissions.includes(permission) : false;
   }
-  // No custom role assigned — this user is on one of the six
-  // built-in roles, which continue to be governed entirely by the
-  // existing legacy role === 'x' checks scattered through this
-  // file. This function intentionally returns false here for those
-  // users; it is not meant to replace the legacy checks, only to
-  // additionally support custom-role users at call sites that
-  // explicitly opt in to checking it (see B4 below).
+  // 5. No custom role — built-in role legacy checks govern this user
+  // at scattered call sites; this function returns false for them.
   return false;
 }
 
@@ -2366,6 +2362,160 @@ async function startServer() {
     db.custom_roles = (db.custom_roles || []).filter(r => r.id !== req.params.id);
     await saveState();
     res.json({ data: { deleted: true } });
+  });
+
+  // Clone a custom role
+  app.post('/api/v1/custom-roles/:id/clone', async (req, res) => {
+    if (db.currentUser?.role !== 'admin') {
+      return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Only an administrator can clone custom roles.' } });
+    }
+    const source = (db.custom_roles || []).find(r => r.id === req.params.id);
+    if (!source) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Custom role not found' } });
+    const { name } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: { code: 'NAME_REQUIRED', message: 'A name is required for the cloned role.', field: 'name' } });
+    }
+    if ((db.custom_roles || []).some(r => r.name.toLowerCase() === name.trim().toLowerCase())) {
+      return res.status(409).json({ error: { code: 'NAME_EXISTS', message: 'A custom role with that name already exists.', field: 'name' } });
+    }
+    const clone = {
+      id: `ROLE-${Math.random().toString(36).substr(2, 9).toUpperCase()}`,
+      name: name.trim(),
+      description: source.description,
+      permissions: [...source.permissions],
+      created_by: db.currentUser.id,
+      created_at: new Date().toISOString()
+    };
+    if (!db.custom_roles) db.custom_roles = [];
+    db.custom_roles.push(clone);
+    await saveState();
+    res.json({ data: clone });
+  });
+
+  // List users assigned to a custom role
+  app.get('/api/v1/custom-roles/:id/users', (req, res) => {
+    if (db.currentUser?.role !== 'admin') {
+      return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Admin only.' } });
+    }
+    const role = (db.custom_roles || []).find(r => r.id === req.params.id);
+    if (!role) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Custom role not found' } });
+    const users = (db.users || []).filter(u => u.custom_role_id === req.params.id)
+      .map(u => ({ id: u.id, name: u.name, email: u.email, role: u.role }));
+    res.json({ data: users });
+  });
+
+  // Bulk-reassign all users off a custom role
+  app.post('/api/v1/custom-roles/:id/bulk-reassign', async (req, res) => {
+    if (db.currentUser?.role !== 'admin') {
+      return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Only an administrator can bulk-reassign roles.' } });
+    }
+    const role = (db.custom_roles || []).find(r => r.id === req.params.id);
+    if (!role) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Custom role not found' } });
+    const { new_role_id, new_custom_role_id } = req.body;
+    if (!new_role_id && !new_custom_role_id) {
+      return res.status(400).json({ error: { code: 'REPLACEMENT_REQUIRED', message: 'Provide new_role_id or new_custom_role_id.' } });
+    }
+    const VALID_ROLES = ['admin', 'ops_manager', 'receiver', 'picker', 'driver', 'auditor'];
+    if (new_role_id && !VALID_ROLES.includes(new_role_id)) {
+      return res.status(400).json({ error: { code: 'INVALID_ROLE', message: `Unknown built-in role: ${new_role_id}` } });
+    }
+    if (new_custom_role_id && !(db.custom_roles || []).find(r => r.id === new_custom_role_id)) {
+      return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Target custom role not found' } });
+    }
+    let count = 0;
+    (db.users || []).forEach(u => {
+      if (u.custom_role_id === req.params.id) {
+        if (new_custom_role_id) {
+          u.custom_role_id = new_custom_role_id;
+        } else {
+          u.role = new_role_id as any;
+          u.custom_role_id = null;
+        }
+        count++;
+      }
+    });
+    await saveState();
+    res.json({ data: { reassigned: count } });
+  });
+
+  // GET /api/v1/users/:id/permissions — effective permissions for a user
+  app.get('/api/v1/users/:id/permissions', (req, res) => {
+    if (db.currentUser?.role !== 'admin') {
+      return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Admin only.' } });
+    }
+    const user = (db.users || []).find(u => u.id === req.params.id);
+    if (!user) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'User not found' } });
+    const ALL_PERMISSIONS: Permission[] = [
+      'receiving:view', 'receiving:create', 'catalogue:view', 'bundles:manage',
+      'cycle_counts:create', 'cycle_counts:approve', 'write_offs:create', 'write_offs:approve',
+      'transfers:create', 'transfers:approve', 'picking:execute', 'packing:execute',
+      'dispatch:execute', 'deliveries:view', 'returns:manage', 'eod_check:execute',
+      'traceability:view', 'recalls:initiate', 'recalls:execute',
+      'assembly_templates:approve', 'production:execute', 'margin_report:view',
+      'api_keys:manage', 'webhooks:manage', 'settings:manage', 'users:manage', 'finance:approve'
+    ];
+    const customRole = user.custom_role_id ? (db.custom_roles || []).find(r => r.id === user.custom_role_id) : null;
+    const effective = user.role === 'admin'
+      ? [...ALL_PERMISSIONS]
+      : ALL_PERMISSIONS.filter(p => userHasPermission(user, p));
+    res.json({
+      data: {
+        base_role: user.role,
+        custom_role_id: user.custom_role_id || null,
+        custom_role_permissions: customRole ? customRole.permissions : [],
+        granted_permissions: user.granted_permissions || [],
+        revoked_permissions: user.revoked_permissions || [],
+        effective_permissions: effective
+      }
+    });
+  });
+
+  // PATCH /api/v1/users/:id/permissions — update per-user overrides
+  app.patch('/api/v1/users/:id/permissions', async (req, res) => {
+    if (db.currentUser?.role !== 'admin') {
+      return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Admin only.' } });
+    }
+    const user = (db.users || []).find(u => u.id === req.params.id);
+    if (!user) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'User not found' } });
+    if (user.role === 'admin') {
+      return res.status(422).json({ error: { code: 'CANNOT_MODIFY_ADMIN', message: 'Cannot set permission overrides on admin users.' } });
+    }
+    const VALID_PERMISSIONS: Permission[] = [
+      'receiving:view', 'receiving:create', 'catalogue:view', 'bundles:manage',
+      'cycle_counts:create', 'cycle_counts:approve', 'write_offs:create', 'write_offs:approve',
+      'transfers:create', 'transfers:approve', 'picking:execute', 'packing:execute',
+      'dispatch:execute', 'deliveries:view', 'returns:manage', 'eod_check:execute',
+      'traceability:view', 'recalls:initiate', 'recalls:execute',
+      'assembly_templates:approve', 'production:execute', 'margin_report:view',
+      'api_keys:manage', 'webhooks:manage', 'settings:manage', 'users:manage', 'finance:approve'
+    ];
+    const { granted_permissions, revoked_permissions } = req.body;
+    if (granted_permissions !== undefined) {
+      if (!Array.isArray(granted_permissions)) {
+        return res.status(400).json({ error: { code: 'INVALID', message: 'granted_permissions must be an array' } });
+      }
+      const bad = granted_permissions.filter((p: string) => !VALID_PERMISSIONS.includes(p as Permission));
+      if (bad.length) return res.status(400).json({ error: { code: 'INVALID_PERMISSIONS', message: `Unknown permission(s): ${bad.join(', ')}` } });
+    }
+    if (revoked_permissions !== undefined) {
+      if (!Array.isArray(revoked_permissions)) {
+        return res.status(400).json({ error: { code: 'INVALID', message: 'revoked_permissions must be an array' } });
+      }
+      const bad = revoked_permissions.filter((p: string) => !VALID_PERMISSIONS.includes(p as Permission));
+      if (bad.length) return res.status(400).json({ error: { code: 'INVALID_PERMISSIONS', message: `Unknown permission(s): ${bad.join(', ')}` } });
+    }
+    // Ensure no permission appears in both arrays
+    if (granted_permissions && revoked_permissions) {
+      const overlap = granted_permissions.filter((p: string) => revoked_permissions.includes(p));
+      if (overlap.length) {
+        return res.status(400).json({ error: { code: 'OVERLAP', message: `Permission(s) cannot be in both granted and revoked: ${overlap.join(', ')}` } });
+      }
+    }
+    if (granted_permissions !== undefined) user.granted_permissions = granted_permissions;
+    if (revoked_permissions !== undefined) user.revoked_permissions = revoked_permissions;
+    await saveState();
+    await logAudit('USER_PERMISSIONS_UPDATED', 'User', user.id, `Permission overrides updated for ${user.name}`, { granted_permissions: user.granted_permissions, revoked_permissions: user.revoked_permissions });
+    res.json({ data: { id: user.id, granted_permissions: user.granted_permissions, revoked_permissions: user.revoked_permissions } });
   });
 
   // List all workflow approvals — filterable by status and type

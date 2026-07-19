@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Users2, Search, Edit2, ShieldAlert, Check, X, Loader2, AlertCircle, 
-  UserCheck, UserX, HelpCircle, Shield, Building, Plus, Trash2, Copy
+import {
+  Users2, Search, Edit2, ShieldAlert, Check, X, Loader2, AlertCircle,
+  UserCheck, UserX, HelpCircle, Shield, Building, Plus, Trash2, Copy,
+  Minus, ShieldCheck, Copy as CloneIcon
 } from 'lucide-react';
 import { User, Role, Warehouse, CustomRole, Permission } from '../types';
 
@@ -117,6 +118,25 @@ export default function Users({ currentUser, triggerToast }: UsersProps) {
   const [formPermissions, setFormPermissions] = useState<Permission[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
   const [savingForm, setSavingForm] = useState<boolean>(false);
+
+  // Clone role modal
+  const [cloneModalRoleId, setCloneModalRoleId] = useState<string | null>(null);
+  const [cloneName, setCloneName] = useState('');
+  const [cloningRole, setCloningRole] = useState(false);
+
+  // Reassign-before-delete modal
+  const [reassignModal, setReassignModal] = useState<{ roleId: string; roleName: string } | null>(null);
+  const [reassignTarget, setReassignTarget] = useState<string>('receiver');
+  const [reassigning, setReassigning] = useState(false);
+
+  // Per-user permissions modal
+  const [permUser, setPermUser] = useState<User | null>(null);
+  const [permData, setPermData] = useState<any>(null);
+  const [permLoading, setPermLoading] = useState(false);
+  const [editGranted, setEditGranted] = useState<Permission[]>([]);
+  const [editRevoked, setEditRevoked] = useState<Permission[]>([]);
+  const [savingPerms, setSavingPerms] = useState(false);
+  const [permError, setPermError] = useState<string | null>(null);
 
   // New User Form & Temp Password Reveal states
   const [showNewUserForm, setShowNewUserForm] = useState<boolean>(false);
@@ -465,25 +485,148 @@ export default function Users({ currentUser, triggerToast }: UsersProps) {
     setRoleFormOpen(true);
   };
 
-  const handleDeleteRole = async (roleId: string) => {
-    if (!window.confirm('Are you sure you want to delete this custom role? This action cannot be undone.')) return;
+  const handleDeleteRoleWithCheck = (role: CustomRole) => {
+    const assigned = users.filter(u => u.custom_role_id === role.id).length;
+    if (assigned > 0) {
+      setReassignTarget('receiver');
+      setReassignModal({ roleId: role.id, roleName: role.name });
+    } else {
+      if (!window.confirm(`Delete custom role "${role.name}"? This cannot be undone.`)) return;
+      doDeleteRole(role.id);
+    }
+  };
+
+  const doDeleteRole = async (roleId: string) => {
     try {
-      const res = await fetch(`/api/v1/custom-roles/${roleId}`, {
-        method: 'DELETE'
-      });
+      const res = await fetch(`/api/v1/custom-roles/${roleId}`, { method: 'DELETE' });
       const data = await res.json();
       if (res.ok) {
-        showToast('Custom role deleted successfully', 'success');
+        showToast('Custom role deleted', 'success');
         setCustomRoles(prev => prev.filter(r => r.id !== roleId));
-      } else if (res.status === 422 && data.error?.message) {
-        showToast(data.error.message, 'error');
       } else {
         showToast(data.error?.message || 'Failed to delete custom role', 'error');
       }
-    } catch (err) {
-      showToast('Connection to server failure', 'error');
+    } catch {
+      showToast('Connection failure', 'error');
     }
   };
+
+  const handleReassignAndDelete = async () => {
+    if (!reassignModal) return;
+    setReassigning(true);
+    try {
+      const isCustom = reassignTarget.startsWith('custom:');
+      const body = isCustom
+        ? { new_custom_role_id: reassignTarget.replace('custom:', '') }
+        : { new_role_id: reassignTarget };
+      const res = await fetch(`/api/v1/custom-roles/${reassignModal.roleId}/bulk-reassign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        showToast(d.error?.message || 'Reassignment failed', 'error');
+        return;
+      }
+      await doDeleteRole(reassignModal.roleId);
+      setReassignModal(null);
+      await fetchUsersAndWarehouses();
+    } catch {
+      showToast('Request failed', 'error');
+    } finally {
+      setReassigning(false);
+    }
+  };
+
+  const handleCloneRole = (role: CustomRole) => {
+    setCloneModalRoleId(role.id);
+    setCloneName(`${role.name} (Copy)`);
+  };
+
+  const submitClone = async () => {
+    if (!cloneModalRoleId || !cloneName.trim()) return;
+    setCloningRole(true);
+    try {
+      const res = await fetch(`/api/v1/custom-roles/${cloneModalRoleId}/clone`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: cloneName.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.error?.message || 'Clone failed', 'error'); return; }
+      setCustomRoles(prev => [...prev, data.data]);
+      showToast('Role cloned successfully', 'success');
+      setCloneModalRoleId(null);
+    } catch {
+      showToast('Request failed', 'error');
+    } finally {
+      setCloningRole(false);
+    }
+  };
+
+  const openPermissionsModal = async (user: User) => {
+    if (user.role === 'admin') {
+      showToast('Admin users have all permissions — overrides cannot be set.', 'info');
+      return;
+    }
+    setPermUser(user);
+    setPermData(null);
+    setPermError(null);
+    setPermLoading(true);
+    try {
+      const res = await fetch(`/api/v1/users/${user.id}/permissions`);
+      const data = await res.json();
+      if (!res.ok) { setPermError(data.error?.message || 'Failed to load permissions'); return; }
+      setPermData(data.data);
+      setEditGranted(data.data.granted_permissions || []);
+      setEditRevoked(data.data.revoked_permissions || []);
+    } catch {
+      setPermError('Failed to load permissions');
+    } finally {
+      setPermLoading(false);
+    }
+  };
+
+  const savePermissions = async () => {
+    if (!permUser) return;
+    // Client-side overlap check
+    const overlap = editGranted.filter(p => editRevoked.includes(p));
+    if (overlap.length) {
+      setPermError(`Cannot both grant and revoke: ${overlap.join(', ')}`);
+      return;
+    }
+    setSavingPerms(true);
+    setPermError(null);
+    try {
+      const res = await fetch(`/api/v1/users/${permUser.id}/permissions`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ granted_permissions: editGranted, revoked_permissions: editRevoked }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setPermError(data.error?.message || 'Save failed'); return; }
+      setUsers(prev => prev.map(u => u.id === permUser.id
+        ? { ...u, granted_permissions: data.data.granted_permissions, revoked_permissions: data.data.revoked_permissions }
+        : u));
+      showToast('Permission overrides saved', 'success');
+      setPermUser(null);
+    } catch {
+      setPermError('Request failed');
+    } finally {
+      setSavingPerms(false);
+    }
+  };
+
+  const ALL_PERMISSIONS: Permission[] = [
+    'receiving:view', 'receiving:create', 'catalogue:view', 'bundles:manage',
+    'cycle_counts:create', 'cycle_counts:approve', 'write_offs:create', 'write_offs:approve',
+    'transfers:create', 'transfers:approve', 'picking:execute', 'packing:execute',
+    'dispatch:execute', 'deliveries:view', 'returns:manage', 'eod_check:execute',
+    'traceability:view', 'recalls:initiate', 'recalls:execute',
+    'assembly_templates:approve', 'production:execute', 'margin_report:view',
+    'api_keys:manage', 'webhooks:manage', 'settings:manage', 'users:manage', 'finance:approve'
+  ];
 
   const handleSaveForm = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -660,6 +803,7 @@ export default function Users({ currentUser, triggerToast }: UsersProps) {
                         <th className="p-4">Email</th>
                         <th className="p-4">Role Badge</th>
                         <th className="p-4">Assigned Warehouse</th>
+                        <th className="p-4 text-center">Permissions</th>
                         <th className="p-4 text-center">Status</th>
                         <th className="p-4">Last Login</th>
                         <th className="p-4 text-right">Actions</th>
@@ -779,9 +923,30 @@ export default function Users({ currentUser, triggerToast }: UsersProps) {
                             </td>
 
                             {/* Warehouse */}
-                            <td className="p-4 text-slate-600 flex items-center gap-1.5 mt-2.5">
-                              <Building className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                              <span className="font-medium">{getWarehouseName(u.primary_warehouse_id)}</span>
+                            <td className="p-4 text-slate-600">
+                              <div className="flex items-center gap-1.5">
+                                <Building className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                <span className="font-medium">{getWarehouseName(u.primary_warehouse_id)}</span>
+                              </div>
+                            </td>
+
+                            {/* Permissions summary */}
+                            <td className="p-4 text-center">
+                              {u.role === 'admin' ? (
+                                <span className="text-[10px] text-slate-400 italic">All</span>
+                              ) : (() => {
+                                const g = (u.granted_permissions || []).length;
+                                const r = (u.revoked_permissions || []).length;
+                                const cr = u.custom_role_id;
+                                if (!g && !r && !cr) return <span className="text-[10px] text-slate-400 italic">Base role</span>;
+                                return (
+                                  <div className="flex flex-col items-center gap-0.5">
+                                    {cr && <span className="text-[9px] bg-violet-50 text-violet-700 border border-violet-200 px-1.5 py-0.5 rounded font-bold">Custom</span>}
+                                    {g > 0 && <span className="text-[9px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded font-bold">+{g} grant{g !== 1 ? 's' : ''}</span>}
+                                    {r > 0 && <span className="text-[9px] bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.5 rounded font-bold">{r} revoked</span>}
+                                  </div>
+                                );
+                              })()}
                             </td>
 
                             {/* Status */}
@@ -806,6 +971,18 @@ export default function Users({ currentUser, triggerToast }: UsersProps) {
                             <td className="p-4 text-right">
                               <div className="flex items-center justify-end gap-2">
                                 
+                                {/* Permissions Button */}
+                                {!isEditing && (
+                                  <button
+                                    onClick={() => openPermissionsModal(u)}
+                                    className="px-2.5 py-1.5 border border-violet-200 hover:border-violet-300 hover:bg-violet-50 text-violet-700 rounded-lg font-bold flex items-center gap-1 transition text-[11px] min-h-[36px] cursor-pointer"
+                                    title="Edit permission overrides"
+                                  >
+                                    <ShieldCheck className="h-3 w-3 shrink-0" />
+                                    <span>Perms</span>
+                                  </button>
+                                )}
+
                                 {/* Edit Role Button */}
                                 {!isEditing && (
                                   <button
@@ -1208,7 +1385,7 @@ export default function Users({ currentUser, triggerToast }: UsersProps) {
                           </div>
                         </div>
 
-                        {/* Action Edit and Delete footer */}
+                        {/* Action Edit / Clone / Delete footer */}
                         <div className="border-t border-slate-100 pt-3 flex items-center gap-2">
                           <button
                             onClick={() => handleOpenEditForm(role)}
@@ -1218,7 +1395,15 @@ export default function Users({ currentUser, triggerToast }: UsersProps) {
                             <span>Edit</span>
                           </button>
                           <button
-                            onClick={() => handleDeleteRole(role.id)}
+                            onClick={() => handleCloneRole(role)}
+                            className="flex-1 py-1.5 border border-indigo-100 hover:border-indigo-300 hover:bg-indigo-50 text-indigo-700 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 min-h-[38px] cursor-pointer"
+                            title="Clone this role"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                            <span>Clone</span>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteRoleWithCheck(role)}
                             className="flex-1 py-1.5 border border-rose-100 hover:border-rose-300 hover:bg-rose-50 text-rose-705 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 min-h-[38px] cursor-pointer"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
@@ -1232,6 +1417,204 @@ export default function Users({ currentUser, triggerToast }: UsersProps) {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Clone Role Modal */}
+      {cloneModalRoleId && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 w-full max-w-sm space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h2 className="font-bold text-sm text-slate-900">Clone Custom Role</h2>
+              <button onClick={() => setCloneModalRoleId(null)} className="p-1 hover:bg-slate-100 rounded-lg min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer">
+                <X className="h-4 w-4 text-slate-400" />
+              </button>
+            </div>
+            <div>
+              <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">New Role Name *</label>
+              <input
+                type="text"
+                value={cloneName}
+                onChange={e => setCloneName(e.target.value)}
+                className="w-full border border-slate-200 rounded-xl p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-300"
+                placeholder="e.g. Senior Dispatcher"
+              />
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setCloneModalRoleId(null)} className="flex-1 border border-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-xs min-h-[44px] cursor-pointer hover:bg-slate-50">Cancel</button>
+              <button onClick={submitClone} disabled={cloningRole || !cloneName.trim()}
+                className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-xl text-xs min-h-[44px] cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2">
+                {cloningRole && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Clone Role
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reassign-before-delete Modal */}
+      {reassignModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 w-full max-w-md space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h2 className="font-bold text-sm text-slate-900">Reassign Users Before Delete</h2>
+                <p className="text-xs text-slate-500 mt-0.5">Users assigned to <strong>{reassignModal.roleName}</strong> must be moved first.</p>
+              </div>
+              <button onClick={() => setReassignModal(null)} className="p-1 hover:bg-slate-100 rounded-lg min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer">
+                <X className="h-4 w-4 text-slate-400" />
+              </button>
+            </div>
+            <div>
+              <label className="text-[10px] font-black uppercase text-slate-400 block mb-1">Move all users to</label>
+              <select value={reassignTarget} onChange={e => setReassignTarget(e.target.value)}
+                className="w-full border border-slate-200 rounded-xl p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-300">
+                <optgroup label="Built-in Roles">
+                  <option value="ops_manager">Ops Manager</option>
+                  <option value="receiver">Receiver</option>
+                  <option value="picker">Picker</option>
+                  <option value="driver">Driver</option>
+                  <option value="auditor">Auditor</option>
+                </optgroup>
+                {customRoles.filter(r => r.id !== reassignModal.roleId).length > 0 && (
+                  <optgroup label="Custom Roles">
+                    {customRoles.filter(r => r.id !== reassignModal.roleId).map(r => (
+                      <option key={r.id} value={`custom:${r.id}`}>{r.name}</option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setReassignModal(null)} className="flex-1 border border-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-xs min-h-[44px] cursor-pointer hover:bg-slate-50">Cancel</button>
+              <button onClick={handleReassignAndDelete} disabled={reassigning}
+                className="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-bold py-2.5 rounded-xl text-xs min-h-[44px] cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2">
+                {reassigning && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Reassign & Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Per-user Permissions Modal */}
+      {permUser && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 p-5">
+              <div>
+                <h2 className="font-bold text-sm text-slate-900">Permission Overrides — {permUser.name}</h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Base role: <strong>{permUser.role}</strong>
+                  {permUser.custom_role_id && (() => {
+                    const cr = customRoles.find(r => r.id === permUser.custom_role_id);
+                    return <> · Custom role: <strong>{cr?.name ?? permUser.custom_role_id}</strong></>;
+                  })()}
+                </p>
+              </div>
+              <button onClick={() => setPermUser(null)} className="p-1 hover:bg-slate-100 rounded-lg min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer">
+                <X className="h-4 w-4 text-slate-400" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 p-5 space-y-5">
+              {permError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  {permError}
+                </div>
+              )}
+
+              {permLoading ? (
+                <div className="flex items-center justify-center py-12 text-slate-400">
+                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                  Loading…
+                </div>
+              ) : permData ? (
+                <>
+                  {/* Legend */}
+                  <div className="flex flex-wrap gap-3 text-[10px] font-bold">
+                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" /> Granted via role</span>
+                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-orange-400 inline-block" /> Individually granted</span>
+                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-rose-500 inline-block" /> Individually revoked</span>
+                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-slate-200 inline-block" /> Not granted</span>
+                  </div>
+
+                  {/* Permission grid with status */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {PERMISSION_GROUPS.map(group => (
+                      <div key={group.name} className="space-y-1">
+                        <p className="text-[9px] font-black uppercase text-slate-400 tracking-wider">{group.name}</p>
+                        {group.permissions.map(perm => {
+                          const isGrantedOverride = editGranted.includes(perm.value);
+                          const isRevokedOverride = editRevoked.includes(perm.value);
+                          const isEffective = (permData.effective_permissions || []).includes(perm.value);
+                          const isRoleGranted = isEffective && !isGrantedOverride && !isRevokedOverride;
+
+                          let dot = 'bg-slate-200';
+                          let label = 'text-slate-400';
+                          if (isRevokedOverride) { dot = 'bg-rose-500'; label = 'text-rose-700 line-through'; }
+                          else if (isGrantedOverride) { dot = 'bg-orange-400'; label = 'text-orange-700'; }
+                          else if (isRoleGranted) { dot = 'bg-emerald-500'; label = 'text-slate-700'; }
+
+                          return (
+                            <div key={perm.value} className="flex items-center gap-2 py-0.5">
+                              <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${dot}`} />
+                              <span className={`font-mono text-[10px] flex-1 ${label}`}>{perm.value}</span>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  title="Grant individually"
+                                  onClick={() => {
+                                    if (isGrantedOverride) {
+                                      setEditGranted(p => p.filter(x => x !== perm.value));
+                                    } else {
+                                      setEditGranted(p => [...p, perm.value]);
+                                      setEditRevoked(p => p.filter(x => x !== perm.value));
+                                    }
+                                  }}
+                                  className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-black border cursor-pointer transition ${isGrantedOverride ? 'bg-orange-100 border-orange-300 text-orange-700' : 'bg-white border-slate-200 text-slate-400 hover:bg-orange-50 hover:border-orange-200'}`}
+                                >
+                                  <Plus className="h-3 w-3" />
+                                </button>
+                                <button
+                                  title="Revoke individually"
+                                  onClick={() => {
+                                    if (isRevokedOverride) {
+                                      setEditRevoked(p => p.filter(x => x !== perm.value));
+                                    } else {
+                                      setEditRevoked(p => [...p, perm.value]);
+                                      setEditGranted(p => p.filter(x => x !== perm.value));
+                                    }
+                                  }}
+                                  className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-black border cursor-pointer transition ${isRevokedOverride ? 'bg-rose-100 border-rose-300 text-rose-700' : 'bg-white border-slate-200 text-slate-400 hover:bg-rose-50 hover:border-rose-200'}`}
+                                >
+                                  <Minus className="h-3 w-3" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="text-[10px] text-slate-400 pt-1">
+                    <strong className="text-orange-600">+</strong> = grant individually (adds on top of role) &nbsp;·&nbsp;
+                    <strong className="text-rose-600">−</strong> = revoke individually (strips from role). Click again to clear.
+                  </div>
+                </>
+              ) : null}
+            </div>
+
+            <div className="border-t border-slate-100 p-5 flex gap-3">
+              <button onClick={() => setPermUser(null)} className="flex-1 border border-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-xs min-h-[44px] cursor-pointer hover:bg-slate-50">Cancel</button>
+              <button onClick={savePermissions} disabled={savingPerms || permLoading || !permData}
+                className="flex-1 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold py-2.5 rounded-xl text-xs min-h-[44px] cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2">
+                {savingPerms && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Save Permission Overrides
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

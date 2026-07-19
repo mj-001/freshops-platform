@@ -63,6 +63,8 @@ export interface User {
                                         // automatically. null for the
                                         // top of the org (e.g. the
                                         // admin who reports to no one).
+  granted_permissions?: Permission[];   // permissions added on top of role
+  revoked_permissions?: Permission[];   // permissions removed from role
 }
 
 export type TempZone = 'frozen' | 'chilled' | 'cool' | 'ambient';
