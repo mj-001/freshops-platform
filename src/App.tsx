@@ -33,6 +33,7 @@ import ZoneCRUD from './components/ZoneCRUD';
 import BinLocationManagement from './components/BinLocationManagement';
 import MarginReport from './components/MarginReport';
 import AuditLogs from './components/AuditLogs';
+import POS from './components/POS';
 import { subscribeToQueue } from './utils/offlineQueue';
 
 import { 
@@ -72,7 +73,8 @@ import {
   PackageCheck,
   Copy,
   Check,
-  GitBranch
+  GitBranch,
+  Store
 } from 'lucide-react';
 
 interface Toast {
@@ -598,6 +600,13 @@ export default function App() {
       ]
     },
     {
+      id: 'pos',
+      label: 'Point of Sale',
+      items: [
+        { id: 'pos', label: 'POS', icon: Store, requiresManager: true }
+      ]
+    },
+    {
       id: 'manufacturing',
       label: 'Manufacturing',
       items: [
@@ -645,6 +654,7 @@ export default function App() {
     workflow_templates: ['settings:manage'],
     pending_approvals: ['transfers:approve'],
     margin_report: ['margin_report:view'],
+    pos: ['dispatch:execute', 'settings:manage'],
     warehouse_mgmt: ['settings:manage'],
     zone_mgmt: ['settings:manage'],
     bin_location_mgmt: ['settings:manage'],
@@ -1242,10 +1252,18 @@ export default function App() {
             />
           )}
 
+          {activeTab === 'pos' && currentUser && (
+            <POS
+              currentUser={currentUser}
+              warehouses={warehouses}
+              triggerToast={triggerToast}
+            />
+          )}
+
           {activeTab === 'recalls' && (
-            <Recalls 
-              currentUser={currentUser} 
-              skus={skus} 
+            <Recalls
+              currentUser={currentUser}
+              skus={skus}
               triggerToast={triggerToast}
             />
           )}

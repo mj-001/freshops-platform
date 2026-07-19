@@ -81,7 +81,14 @@ import {
   AssetType,
   AssetEvent,
   AssetStatus,
-  BinLocation
+  BinLocation,
+  POSMode,
+  PaymentMethod,
+  TillSession,
+  TillSessionStatus,
+  POSSale,
+  POSSaleLine,
+  POSSaleStatus
 } from './src/types';
 
 import { DatabaseAdapter } from './src/adapters/DatabaseAdapter';
@@ -248,6 +255,10 @@ interface DbState {
   asset_types: AssetType[];
   asset_events: AssetEvent[];
   bin_locations: BinLocation[];
+  till_sessions: TillSession[];
+  pos_sales: POSSale[];
+  pos_sale_counter: number;
+  pos_session_counter: number;
 }
 
 // Global In-Memory Database
@@ -322,7 +333,11 @@ let db: DbState = {
   counting_sections: [],
   asset_types: [],
   asset_events: [],
-  bin_locations: []
+  bin_locations: [],
+  till_sessions: [],
+  pos_sales: [],
+  pos_sale_counter: 0,
+  pos_session_counter: 0
 };
 
 // State persistence
@@ -364,6 +379,10 @@ function runDefensiveMigrations() {
       if (!db.asset_events) db.asset_events = [];
       if (!db.asset_types) db.asset_types = [];
       if (!db.bin_locations) db.bin_locations = [];
+      if (!db.till_sessions) db.till_sessions = [];
+      if (!db.pos_sales) db.pos_sales = [];
+      if (db.pos_sale_counter === undefined) db.pos_sale_counter = 0;
+      if (db.pos_session_counter === undefined) db.pos_session_counter = 0;
 
       // Ensure is_active on all warehouses and zones
       db.warehouses.forEach((w: any) => { if (w.is_active === undefined) w.is_active = true; });
@@ -1029,7 +1048,11 @@ async function resetState() {
     counting_sections: [],
     asset_types: [],
     asset_events: [],
-    bin_locations: []
+    bin_locations: [],
+    till_sessions: [],
+    pos_sales: [],
+    pos_sale_counter: 0,
+    pos_session_counter: 0
   };
 
   db.notifications = [
@@ -11179,6 +11202,455 @@ async function startServer() {
 
   // --- END OF TRANSFER LOGISTICS ENDPOINTS ---
 
+  // ─── POS MODULE ──────────────────────────────────────────────────────────────
+
+  // Helper: build zero-padded sale/session numbers
+  const fmtPosNum = (n: number, prefix: string) =>
+    `${prefix}-${String(n).padStart(4, '0')}`;
+
+  // Helper: FEFO batch selection for a SKU at a warehouse
+  function posFefoBatches(skuId: string, warehouseId: string): Array<{
+    batch_id: string; batch_number: string; expiry_date: string;
+    qty_available: number; location_id: string;
+  }> {
+    const map = new Map<string, { batch_id: string; batch_number: string; expiry_date: string; qty_available: number; location_id: string }>();
+    for (const e of db.stock_ledger) {
+      if (e.sku_id !== skuId || e.warehouse_id !== warehouseId) continue;
+      const key = `${e.batch_id}|${e.location_id}`;
+      const existing = map.get(key);
+      if (existing) {
+        existing.qty_available += e.quantity;
+      } else {
+        const batch = db.batches.find((b: any) => b.id === e.batch_id);
+        if (!batch || batch.status === 'depleted' || batch.status === 'recalled') continue;
+        map.set(key, {
+          batch_id: e.batch_id,
+          batch_number: batch.batch_number,
+          expiry_date: batch.expiry_date,
+          qty_available: e.quantity,
+          location_id: e.location_id
+        });
+      }
+    }
+    return [...map.values()]
+      .filter(r => r.qty_available > 0)
+      .sort((a, b) => new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime());
+  }
+
+  // GET /api/v1/pos/sessions
+  app.get('/api/v1/pos/sessions', (req, res) => {
+    let sessions = db.till_sessions || [];
+    const { warehouse_id, status, mode } = req.query as Record<string, string>;
+    if (warehouse_id) sessions = sessions.filter(s => s.warehouse_id === warehouse_id);
+    if (status) sessions = sessions.filter(s => s.status === status);
+    if (mode) sessions = sessions.filter(s => s.mode === mode);
+    res.json({ data: sessions.slice().reverse() });
+  });
+
+  // GET /api/v1/pos/sessions/active
+  app.get('/api/v1/pos/sessions/active', (req, res) => {
+    const { warehouse_id } = req.query as Record<string, string>;
+    if (!warehouse_id) return res.status(400).json({ error: { code: 'WAREHOUSE_REQUIRED', message: 'warehouse_id query param required.' } });
+    const session = (db.till_sessions || []).find(s => s.warehouse_id === warehouse_id && s.status === 'open');
+    res.json({ data: session || null });
+  });
+
+  // POST /api/v1/pos/sessions/open
+  app.post('/api/v1/pos/sessions/open', async (req, res) => {
+    const user = (req as any).user as User;
+    if (user.role !== 'admin' && user.role !== 'ops_manager') {
+      return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Admin or ops_manager required.' } });
+    }
+    const { mode, warehouse_id, float_amount_cents, notes } = req.body;
+    if (!mode || !warehouse_id || float_amount_cents === undefined) {
+      return res.status(400).json({ error: { code: 'MISSING_FIELDS', message: 'mode, warehouse_id, float_amount_cents required.' } });
+    }
+    if (mode !== 'warehouse_desk' && mode !== 'retail') {
+      return res.status(400).json({ error: { code: 'INVALID_MODE', message: 'mode must be warehouse_desk or retail.' } });
+    }
+    const existing = (db.till_sessions || []).find(s => s.warehouse_id === warehouse_id && s.status === 'open');
+    if (existing) {
+      return res.status(409).json({ error: { code: 'SESSION_ALREADY_OPEN', message: `An open session already exists for this warehouse: ${existing.id}.` } });
+    }
+    db.pos_session_counter = (db.pos_session_counter || 0) + 1;
+    const session: TillSession = {
+      id: fmtPosNum(db.pos_session_counter, 'SESS'),
+      mode: mode as POSMode,
+      warehouse_id,
+      opened_by: user.id,
+      opened_at: new Date().toISOString(),
+      closed_by: null,
+      closed_at: null,
+      status: 'open',
+      float_amount_cents: Number(float_amount_cents),
+      expected_cash_cents: Number(float_amount_cents),
+      actual_cash_cents: null,
+      cash_variance_cents: null,
+      total_sales_cents: 0,
+      total_refunds_cents: 0,
+      sale_count: 0,
+      notes: notes || null
+    };
+    if (!db.till_sessions) db.till_sessions = [];
+    db.till_sessions.push(session);
+    await saveState();
+    res.status(201).json({ data: session });
+  });
+
+  // POST /api/v1/pos/sessions/:id/close
+  app.post('/api/v1/pos/sessions/:id/close', async (req, res) => {
+    const user = (req as any).user as User;
+    if (user.role !== 'admin' && user.role !== 'ops_manager') {
+      return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Admin or ops_manager required.' } });
+    }
+    const session = (db.till_sessions || []).find(s => s.id === req.params.id);
+    if (!session) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Session not found.' } });
+    if (session.status === 'closed') return res.status(409).json({ error: { code: 'ALREADY_CLOSED', message: 'Session already closed.' } });
+    const { actual_cash_cents, notes } = req.body;
+    if (actual_cash_cents === undefined) {
+      return res.status(400).json({ error: { code: 'MISSING_FIELDS', message: 'actual_cash_cents required.' } });
+    }
+    // Calculate expected cash: float + all cash sales in session minus cash refunds
+    const sessionSales = (db.pos_sales || []).filter(s => s.session_id === session.id);
+    const cashSales = sessionSales.filter(s => s.payment_method === 'cash' && s.status !== 'refunded').reduce((sum, s) => sum + s.total_cents, 0);
+    const cashRefunds = sessionSales.filter(s => s.refund_amount_cents && s.payment_method === 'cash').reduce((sum, s) => sum + (s.refund_amount_cents || 0), 0);
+    const expected = session.float_amount_cents + cashSales - cashRefunds;
+    session.expected_cash_cents = expected;
+    session.actual_cash_cents = Number(actual_cash_cents);
+    session.cash_variance_cents = Number(actual_cash_cents) - expected;
+    session.closed_by = user.id;
+    session.closed_at = new Date().toISOString();
+    session.status = 'closed';
+    if (notes) session.notes = notes;
+    await saveState();
+    res.json({ data: session });
+  });
+
+  // GET /api/v1/pos/sessions/:id
+  app.get('/api/v1/pos/sessions/:id', (req, res) => {
+    const session = (db.till_sessions || []).find(s => s.id === req.params.id);
+    if (!session) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Session not found.' } });
+    const sales = (db.pos_sales || []).filter(s => s.session_id === session.id);
+    res.json({ data: { ...session, sales } });
+  });
+
+  // GET /api/v1/pos/skus
+  app.get('/api/v1/pos/skus', (req, res) => {
+    const { q, warehouse_id, mode } = req.query as Record<string, string>;
+    if (!warehouse_id) return res.status(400).json({ error: { code: 'WAREHOUSE_REQUIRED', message: 'warehouse_id required.' } });
+    const query = (q || '').toLowerCase();
+    let skus = db.skus.filter((s: any) => {
+      if (s.is_archived) return false;
+      if (mode === 'retail' && s.publication_status !== 'published') return false;
+      if (query && !s.name.toLowerCase().includes(query) && !(s.code || '').toLowerCase().includes(query)) return false;
+      return true;
+    });
+    const results = skus.map((sku: any) => {
+      const batches = posFefoBatches(sku.id, warehouse_id);
+      const available_qty = batches.reduce((sum, b) => sum + b.qty_available, 0);
+      if (available_qty <= 0) return null;
+      const latestPrice = (db.price_history || [])
+        .filter((p: any) => p.sku_id === sku.id)
+        .sort((a: any, b: any) => new Date(b.effective_from).getTime() - new Date(a.effective_from).getTime())[0];
+      return {
+        id: sku.id,
+        name: sku.name,
+        code: sku.code,
+        temp_zone: sku.temp_zone,
+        unit_of_measure: sku.unit_of_measure,
+        available_qty,
+        catalogue_price_cents: latestPrice?.selling_price_cents ?? sku.selling_price_cents ?? 0,
+        cost_price_cents: latestPrice?.cost_price_cents ?? sku.cost_price_cents ?? 0,
+        batches
+      };
+    }).filter(Boolean);
+    res.json({ data: results });
+  });
+
+  // GET /api/v1/pos/sales
+  app.get('/api/v1/pos/sales', (req, res) => {
+    let sales = db.pos_sales || [];
+    const { session_id, warehouse_id, mode, customer_id, status } = req.query as Record<string, string>;
+    if (session_id) sales = sales.filter(s => s.session_id === session_id);
+    if (warehouse_id) sales = sales.filter(s => s.warehouse_id === warehouse_id);
+    if (mode) sales = sales.filter(s => s.mode === mode);
+    if (customer_id) sales = sales.filter(s => s.customer_id === customer_id);
+    if (status) sales = sales.filter(s => s.status === status);
+    res.json({ data: sales.slice().reverse() });
+  });
+
+  // GET /api/v1/pos/sales/:id
+  app.get('/api/v1/pos/sales/:id', (req, res) => {
+    const sale = (db.pos_sales || []).find(s => s.id === req.params.id);
+    if (!sale) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Sale not found.' } });
+    res.json({ data: sale });
+  });
+
+  // POST /api/v1/pos/sales
+  app.post('/api/v1/pos/sales', async (req, res) => {
+    const user = (req as any).user as User;
+    const { session_id, mode, warehouse_id, customer_id, lines, payment_method,
+            mpesa_reference, card_reference, cash_tendered_cents } = req.body;
+
+    if (!session_id || !mode || !warehouse_id || !lines?.length || !payment_method) {
+      return res.status(400).json({ error: { code: 'MISSING_FIELDS', message: 'session_id, mode, warehouse_id, lines, payment_method required.' } });
+    }
+    const session = (db.till_sessions || []).find(s => s.id === session_id);
+    if (!session) return res.status(404).json({ error: { code: 'SESSION_NOT_FOUND', message: 'Session not found.' } });
+    if (session.status !== 'open') return res.status(409).json({ error: { code: 'SESSION_CLOSED', message: 'Till session is not open.' } });
+
+    if (mode === 'retail' && !customer_id) {
+      return res.status(400).json({ error: { code: 'CUSTOMER_REQUIRED', message: 'customer_id required for retail mode.' } });
+    }
+    const customer = customer_id ? db.customers.find((c: any) => c.id === customer_id) : null;
+    if (customer_id && !customer) {
+      return res.status(404).json({ error: { code: 'CUSTOMER_NOT_FOUND', message: 'Customer not found.' } });
+    }
+    if (payment_method === 'cash' && cash_tendered_cents === undefined) {
+      return res.status(400).json({ error: { code: 'CASH_TENDERED_REQUIRED', message: 'cash_tendered_cents required for cash payment.' } });
+    }
+    if (payment_method === 'mpesa' && !mpesa_reference) {
+      return res.status(400).json({ error: { code: 'MPESA_REF_REQUIRED', message: 'mpesa_reference required for M-Pesa payment.' } });
+    }
+    if (payment_method === 'card' && !card_reference) {
+      return res.status(400).json({ error: { code: 'CARD_REF_REQUIRED', message: 'card_reference required for card payment.' } });
+    }
+
+    db.pos_sale_counter = (db.pos_sale_counter || 0) + 1;
+    const saleId = fmtPosNum(db.pos_sale_counter, 'POS');
+    const now = new Date().toISOString();
+    const saleLines: POSSaleLine[] = [];
+    let subtotal = 0;
+    let discountTotal = 0;
+    const ledgerEntries: StockLedgerEntry[] = [];
+
+    for (const lineInput of lines) {
+      const { sku_id, qty, unit_price_cents, discount_pct = 0 } = lineInput;
+      if (!sku_id || !qty || qty <= 0) {
+        return res.status(400).json({ error: { code: 'INVALID_LINE', message: `Invalid line for SKU ${sku_id}.` } });
+      }
+      const sku = db.skus.find((s: any) => s.id === sku_id);
+      if (!sku) return res.status(404).json({ error: { code: 'SKU_NOT_FOUND', message: `SKU ${sku_id} not found.` } });
+      if (mode === 'retail' && sku.publication_status !== 'published') {
+        return res.status(422).json({ error: { code: 'SKU_NOT_PUBLISHED', message: `SKU ${sku.name} is not published for retail sale.` } });
+      }
+
+      const latestPrice = (db.price_history || [])
+        .filter((p: any) => p.sku_id === sku_id)
+        .sort((a: any, b: any) => new Date(b.effective_from).getTime() - new Date(a.effective_from).getTime())[0];
+      const cataloguePrice = latestPrice?.selling_price_cents ?? sku.selling_price_cents ?? 0;
+
+      // FEFO allocation
+      const available = posFefoBatches(sku_id, warehouse_id);
+      let remaining = Number(qty);
+      const allocations: Array<{ batch_id: string; batch_number: string; expiry_date: string; qty: number; location_id: string }> = [];
+      for (const b of available) {
+        if (remaining <= 0) break;
+        const take = Math.min(remaining, b.qty_available);
+        allocations.push({ batch_id: b.batch_id, batch_number: b.batch_number, expiry_date: b.expiry_date, qty: take, location_id: b.location_id });
+        remaining -= take;
+      }
+      if (remaining > 0) {
+        return res.status(422).json({ error: { code: 'INSUFFICIENT_STOCK', message: `Insufficient stock for SKU ${sku.name}. Available: ${qty - remaining}, requested: ${qty}.` } });
+      }
+
+      const effectiveUnitPrice = mode === 'warehouse_desk' ? Number(unit_price_cents ?? cataloguePrice) : cataloguePrice;
+      const discountPct = mode === 'warehouse_desk' ? Number(discount_pct) : 0;
+      const discountedPrice = Math.round(effectiveUnitPrice * (1 - discountPct / 100));
+      const lineTotal = discountedPrice * Number(qty);
+      const catalogueTotal = cataloguePrice * Number(qty);
+      subtotal += lineTotal;
+      discountTotal += (catalogueTotal - lineTotal);
+
+      // Create one sale line (consolidated) and ledger entries per allocation
+      const lineId = `${saleId}-L${saleLines.length + 1}`;
+      saleLines.push({
+        id: lineId,
+        sale_id: saleId,
+        sku_id,
+        sku_name: sku.name,
+        batch_id: allocations[0].batch_id,
+        batch_number: allocations[0].batch_number,
+        expiry_date: allocations[0].expiry_date,
+        qty: Number(qty),
+        unit_price_cents: discountedPrice,
+        catalogue_price_cents: cataloguePrice,
+        discount_pct: discountPct,
+        line_total_cents: lineTotal,
+        location_id: allocations[0].location_id
+      });
+
+      for (const alloc of allocations) {
+        ledgerEntries.push({
+          id: `LE-POS-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          timestamp: now,
+          sku_id,
+          batch_id: alloc.batch_id,
+          location_id: alloc.location_id,
+          warehouse_id,
+          quantity: -alloc.qty,
+          transaction_type: 'pos_sale',
+          reference_id: saleId,
+          reference_type: 'pos_sale',
+          user_id: user.id,
+          notes: `POS sale ${saleId}`
+        });
+      }
+    }
+
+    const total = subtotal;
+    const changeDue = payment_method === 'cash' ? Number(cash_tendered_cents) - total : null;
+    if (payment_method === 'cash' && changeDue !== null && changeDue < 0) {
+      return res.status(422).json({ error: { code: 'INSUFFICIENT_TENDER', message: 'Cash tendered is less than sale total.' } });
+    }
+
+    const sale: POSSale = {
+      id: saleId,
+      sale_number: saleId,
+      session_id,
+      mode: mode as POSMode,
+      warehouse_id,
+      customer_id: customer_id || null,
+      customer_name: customer?.name || null,
+      lines: saleLines,
+      subtotal_cents: subtotal,
+      discount_total_cents: discountTotal,
+      total_cents: total,
+      payment_method: payment_method as PaymentMethod,
+      mpesa_reference: mpesa_reference || null,
+      card_reference: card_reference || null,
+      cash_tendered_cents: payment_method === 'cash' ? Number(cash_tendered_cents) : null,
+      change_due_cents: changeDue,
+      status: 'completed',
+      served_by: user.id,
+      created_at: now,
+      refunded_at: null,
+      refunded_by: null,
+      refund_reason: null,
+      refund_amount_cents: null
+    };
+
+    if (!db.pos_sales) db.pos_sales = [];
+    db.pos_sales.push(sale);
+    db.stock_ledger.push(...ledgerEntries);
+    session.total_sales_cents += total;
+    session.sale_count += 1;
+    session.expected_cash_cents = session.float_amount_cents +
+      (db.pos_sales.filter(s => s.session_id === session_id && s.payment_method === 'cash' && s.status !== 'refunded').reduce((sum, s) => sum + s.total_cents, 0));
+
+    await saveState();
+    res.status(201).json({ data: sale });
+  });
+
+  // POST /api/v1/pos/sales/:id/refund
+  app.post('/api/v1/pos/sales/:id/refund', async (req, res) => {
+    const user = (req as any).user as User;
+    if (user.role !== 'admin' && user.role !== 'ops_manager') {
+      return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Admin or ops_manager required.' } });
+    }
+    const sale = (db.pos_sales || []).find(s => s.id === req.params.id);
+    if (!sale) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Sale not found.' } });
+    if (sale.status === 'refunded') return res.status(409).json({ error: { code: 'ALREADY_REFUNDED', message: 'Sale already fully refunded.' } });
+    const { refund_reason, refund_amount_cents } = req.body;
+    if (!refund_reason || refund_amount_cents === undefined) {
+      return res.status(400).json({ error: { code: 'MISSING_FIELDS', message: 'refund_reason and refund_amount_cents required.' } });
+    }
+    const refundAmt = Number(refund_amount_cents);
+    if (refundAmt <= 0 || refundAmt > sale.total_cents) {
+      return res.status(422).json({ error: { code: 'INVALID_REFUND_AMOUNT', message: `Refund amount must be between 1 and ${sale.total_cents} cents.` } });
+    }
+    const now = new Date().toISOString();
+    const isFullRefund = refundAmt === sale.total_cents;
+
+    // Write pos_refund ledger entries (stock returns)
+    for (const line of sale.lines) {
+      db.stock_ledger.push({
+        id: `LE-POSREF-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        timestamp: now,
+        sku_id: line.sku_id,
+        batch_id: line.batch_id,
+        location_id: line.location_id,
+        warehouse_id: sale.warehouse_id,
+        quantity: line.qty,
+        transaction_type: 'pos_refund',
+        reference_id: sale.id,
+        reference_type: 'pos_sale',
+        user_id: user.id,
+        notes: `Refund for POS sale ${sale.id}: ${refund_reason}`
+      });
+    }
+
+    sale.status = isFullRefund ? 'refunded' : 'partial_refund';
+    sale.refunded_at = now;
+    sale.refunded_by = user.id;
+    sale.refund_reason = refund_reason;
+    sale.refund_amount_cents = refundAmt;
+
+    // Update session totals
+    const session = (db.till_sessions || []).find(s => s.id === sale.session_id);
+    if (session) {
+      session.total_refunds_cents += refundAmt;
+    }
+
+    await saveState();
+    res.json({ data: sale });
+  });
+
+  // GET /api/v1/reports/pos-summary
+  app.get('/api/v1/reports/pos-summary', (req, res) => {
+    const { session_id, from, to, warehouse_id, mode } = req.query as Record<string, string>;
+    let sales = (db.pos_sales || []).filter(s => s.status !== 'refunded');
+    if (session_id) sales = sales.filter(s => s.session_id === session_id);
+    if (warehouse_id) sales = sales.filter(s => s.warehouse_id === warehouse_id);
+    if (mode) sales = sales.filter(s => s.mode === mode);
+    if (from) sales = sales.filter(s => s.created_at >= from);
+    if (to) sales = sales.filter(s => s.created_at <= to + 'T23:59:59Z');
+
+    const total_sales_cents = sales.reduce((sum, s) => sum + s.total_cents, 0);
+    const total_refunds_cents = (db.pos_sales || [])
+      .filter(s => s.refund_amount_cents && (!session_id || s.session_id === session_id) && (!warehouse_id || s.warehouse_id === warehouse_id))
+      .reduce((sum, s) => sum + (s.refund_amount_cents || 0), 0);
+    const net_revenue_cents = total_sales_cents - total_refunds_cents;
+
+    const byMethod: Record<string, { count: number; total_cents: number }> = { cash: { count: 0, total_cents: 0 }, mpesa: { count: 0, total_cents: 0 }, card: { count: 0, total_cents: 0 } };
+    for (const s of sales) {
+      byMethod[s.payment_method].count += 1;
+      byMethod[s.payment_method].total_cents += s.total_cents;
+    }
+
+    // Top 5 SKUs
+    const skuMap = new Map<string, { sku_id: string; sku_name: string; qty: number; total_cents: number }>();
+    for (const sale of sales) {
+      for (const line of sale.lines) {
+        const e = skuMap.get(line.sku_id);
+        if (e) { e.qty += line.qty; e.total_cents += line.line_total_cents; }
+        else skuMap.set(line.sku_id, { sku_id: line.sku_id, sku_name: line.sku_name, qty: line.qty, total_cents: line.line_total_cents });
+      }
+    }
+    const top_skus = [...skuMap.values()].sort((a, b) => b.total_cents - a.total_cents).slice(0, 5);
+
+    // Revenue by day
+    const dayMap = new Map<string, number>();
+    for (const s of sales) {
+      const day = s.created_at.slice(0, 10);
+      dayMap.set(day, (dayMap.get(day) || 0) + s.total_cents);
+    }
+    const revenue_by_day = [...dayMap.entries()].sort().map(([date, total_cents]) => ({ date, total_cents }));
+
+    res.json({
+      data: {
+        total_sales_cents,
+        total_refunds_cents,
+        net_revenue_cents,
+        sale_count: sales.length,
+        average_basket_cents: sales.length ? Math.round(total_sales_cents / sales.length) : 0,
+        by_payment_method: byMethod,
+        top_skus,
+        revenue_by_day
+      }
+    });
+  });
+
   // Reset or run tests inside backend mock state for UI animations!
   app.post('/api/v1/tests/run', async (req, res) => {
     const suiteResults = await runBrtTestSuite(db);
@@ -11249,4 +11721,5 @@ function nextManifestNumber(type: 'delivery' | 'replenishment'): string {
 }
 
 startServer();
+
 

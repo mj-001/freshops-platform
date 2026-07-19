@@ -252,7 +252,9 @@ export type TransactionType =
   | 'correction'
   | 'assembly_consumption'
   | 'assembly_production'
-  | 'assembly_loss';
+  | 'assembly_loss'
+  | 'pos_sale'
+  | 'pos_refund';
 
 export interface StockLedgerEntry {
   id: string;
@@ -264,7 +266,7 @@ export interface StockLedgerEntry {
   quantity: number; // positive = in, negative = out
   transaction_type: TransactionType;
   reference_id: string;
-  reference_type: 'goods_receipt' | 'transfer' | 'pick_list' | 'cycle_count' | 'write_off' | 'return' | 'assembly_order' | 'production_run';
+  reference_type: 'goods_receipt' | 'transfer' | 'pick_list' | 'cycle_count' | 'write_off' | 'return' | 'assembly_order' | 'production_run' | 'pos_sale';
   user_id: string;
   notes: string | null;
 }
@@ -1435,6 +1437,74 @@ export interface CountingSection {
   created_at: string;
 }
 
+// ─── POS MODULE ──────────────────────────────────────────────────────────────
+
+export type POSMode = 'warehouse_desk' | 'retail';
+export type PaymentMethod = 'cash' | 'mpesa' | 'card';
+export type TillSessionStatus = 'open' | 'closed';
+export type POSSaleStatus = 'completed' | 'refunded' | 'partial_refund';
+
+export interface TillSession {
+  id: string;
+  mode: POSMode;
+  warehouse_id: string;
+  opened_by: string;
+  opened_at: string;
+  closed_by: string | null;
+  closed_at: string | null;
+  status: TillSessionStatus;
+  float_amount_cents: number;
+  expected_cash_cents: number;
+  actual_cash_cents: number | null;
+  cash_variance_cents: number | null;
+  total_sales_cents: number;
+  total_refunds_cents: number;
+  sale_count: number;
+  notes: string | null;
+}
+
+export interface POSSaleLine {
+  id: string;
+  sale_id: string;
+  sku_id: string;
+  sku_name: string;
+  batch_id: string;
+  batch_number: string;
+  expiry_date: string;
+  qty: number;
+  unit_price_cents: number;
+  catalogue_price_cents: number;
+  discount_pct: number;
+  line_total_cents: number;
+  location_id: string;
+}
+
+export interface POSSale {
+  id: string;
+  sale_number: string;
+  session_id: string;
+  mode: POSMode;
+  warehouse_id: string;
+  customer_id: string | null;
+  customer_name: string | null;
+  lines: POSSaleLine[];
+  subtotal_cents: number;
+  discount_total_cents: number;
+  total_cents: number;
+  payment_method: PaymentMethod;
+  mpesa_reference: string | null;
+  card_reference: string | null;
+  cash_tendered_cents: number | null;
+  change_due_cents: number | null;
+  status: POSSaleStatus;
+  served_by: string;
+  created_at: string;
+  refunded_at: string | null;
+  refunded_by: string | null;
+  refund_reason: string | null;
+  refund_amount_cents: number | null;
+}
+
 export interface AuditLog {
   id: string;
   timestamp: string;
@@ -1457,6 +1527,11 @@ export interface DbState {
   counting_sections: CountingSection[];
   asset_types: AssetType[];
   asset_events: AssetEvent[];
+  bin_locations: BinLocation[];
+  till_sessions: TillSession[];
+  pos_sales: POSSale[];
+  pos_sale_counter: number;
+  pos_session_counter: number;
 }
 
 
