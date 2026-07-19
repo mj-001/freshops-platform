@@ -106,6 +106,20 @@ export interface Location {
   is_exit_point?: boolean;
 }
 
+export interface BinLocation {
+  id: string;
+  code: string;
+  name?: string;
+  warehouse_id: string;
+  zone_id: string;
+  location_type: 'pick' | 'bulk' | 'receiving' | 'dispatch' | 'quarantine';
+  capacity_units?: number;
+  capacity_kg?: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Supplier {
   id: string;
   name: string;

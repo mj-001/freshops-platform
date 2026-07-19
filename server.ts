@@ -80,7 +80,8 @@ import {
   CycleCountItem,
   AssetType,
   AssetEvent,
-  AssetStatus
+  AssetStatus,
+  BinLocation
 } from './src/types';
 
 import { DatabaseAdapter } from './src/adapters/DatabaseAdapter';
@@ -246,6 +247,7 @@ interface DbState {
   counting_sections: CountingSection[];
   asset_types: AssetType[];
   asset_events: AssetEvent[];
+  bin_locations: BinLocation[];
 }
 
 // Global In-Memory Database
@@ -319,7 +321,8 @@ let db: DbState = {
   workflow_templates: [],
   counting_sections: [],
   asset_types: [],
-  asset_events: []
+  asset_events: [],
+  bin_locations: []
 };
 
 // State persistence
@@ -360,6 +363,11 @@ function runDefensiveMigrations() {
       // Defensive migrations for assets
       if (!db.asset_events) db.asset_events = [];
       if (!db.asset_types) db.asset_types = [];
+      if (!db.bin_locations) db.bin_locations = [];
+
+      // Ensure is_active on all warehouses and zones
+      db.warehouses.forEach((w: any) => { if (w.is_active === undefined) w.is_active = true; });
+      db.zones.forEach((z: any) => { if (z.is_active === undefined) z.is_active = true; });
 
       // Migrate existing Asset records to new schema
       (db.assets || []).forEach((a: any) => {
@@ -976,7 +984,8 @@ async function resetState() {
     workflow_templates: [...INITIAL_WORKFLOW_TEMPLATES],
     counting_sections: [],
     asset_types: [],
-    asset_events: []
+    asset_events: [],
+    bin_locations: []
   };
 
   db.notifications = [
@@ -2625,6 +2634,302 @@ async function startServer() {
     res.json({ data: db.locations });
   });
 
+  // ---- Warehouse CRUD & deactivation ----
+
+  app.post('/api/v1/warehouses', async (req, res) => {
+    const allowed = ['ops_manager', 'admin'];
+    if (!db.currentUser || !allowed.includes(db.currentUser.role)) {
+      return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Insufficient permissions' } });
+    }
+    const { name, code, type, address } = req.body;
+    if (!name || !code || !type) {
+      return res.status(400).json({ error: { code: 'MISSING_FIELDS', message: 'name, code and type are required' } });
+    }
+    const validTypes = ['main_warehouse', 'fulfilment_point'];
+    if (!validTypes.includes(type)) {
+      return res.status(400).json({ error: { code: 'INVALID_TYPE', message: `type must be one of: ${validTypes.join(', ')}` } });
+    }
+    if (db.warehouses.find(w => w.id === code || (w as any).code === code)) {
+      return res.status(409).json({ error: { code: 'CODE_EXISTS', message: 'A warehouse with that code already exists' } });
+    }
+    const wh: Warehouse = {
+      id: `WH-${Date.now()}`,
+      name,
+      type,
+      address: address || '',
+      is_active: true,
+      created_at: new Date().toISOString()
+    } as any;
+    db.warehouses.push(wh);
+    await saveState();
+    res.status(201).json({ data: wh });
+  });
+
+  app.patch('/api/v1/warehouses/:id', async (req, res) => {
+    const allowed = ['ops_manager', 'admin'];
+    if (!db.currentUser || !allowed.includes(db.currentUser.role)) {
+      return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Insufficient permissions' } });
+    }
+    const wh = db.warehouses.find(w => w.id === req.params.id);
+    if (!wh) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Warehouse not found' } });
+    const { name, type, address } = req.body;
+    if (name) wh.name = name;
+    if (address !== undefined) (wh as any).address = address;
+    if (type) {
+      const validTypes = ['main_warehouse', 'fulfilment_point'];
+      if (!validTypes.includes(type)) {
+        return res.status(400).json({ error: { code: 'INVALID_TYPE', message: `type must be one of: ${validTypes.join(', ')}` } });
+      }
+      wh.type = type;
+    }
+    await saveState();
+    res.json({ data: wh });
+  });
+
+  app.patch('/api/v1/warehouses/:id/deactivate', async (req, res) => {
+    const allowed = ['ops_manager', 'admin'];
+    if (!db.currentUser || !allowed.includes(db.currentUser.role)) {
+      return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Insufficient permissions' } });
+    }
+    const wh = db.warehouses.find(w => w.id === req.params.id);
+    if (!wh) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Warehouse not found' } });
+    const activeZones = db.zones.filter(z => z.warehouse_id === wh.id && z.is_active);
+    if (activeZones.length > 0) {
+      return res.status(422).json({
+        error: { code: 'HAS_ACTIVE_ZONES', message: `Cannot deactivate warehouse with ${activeZones.length} active zone(s). Deactivate zones first.` }
+      });
+    }
+    wh.is_active = false;
+    await saveState();
+    res.json({ data: wh });
+  });
+
+  app.patch('/api/v1/warehouses/:id/activate', async (req, res) => {
+    const allowed = ['ops_manager', 'admin'];
+    if (!db.currentUser || !allowed.includes(db.currentUser.role)) {
+      return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Insufficient permissions' } });
+    }
+    const wh = db.warehouses.find(w => w.id === req.params.id);
+    if (!wh) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Warehouse not found' } });
+    wh.is_active = true;
+    await saveState();
+    res.json({ data: wh });
+  });
+
+  // ---- Zone CRUD & deactivation ----
+
+  app.post('/api/v1/zones', async (req, res) => {
+    const allowed = ['ops_manager', 'admin'];
+    if (!db.currentUser || !allowed.includes(db.currentUser.role)) {
+      return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Insufficient permissions' } });
+    }
+    const { name, code, warehouse_id, zone_type, min_temp_celsius, max_temp_celsius, max_capacity_kg } = req.body;
+    if (!name || !code || !warehouse_id || !zone_type) {
+      return res.status(400).json({ error: { code: 'MISSING_FIELDS', message: 'name, code, warehouse_id and zone_type are required' } });
+    }
+    const validZoneTypes = ['ambient', 'chilled', 'frozen', 'hazmat', 'quarantine'];
+    if (!validZoneTypes.includes(zone_type)) {
+      return res.status(400).json({ error: { code: 'INVALID_ZONE_TYPE', message: `zone_type must be one of: ${validZoneTypes.join(', ')}` } });
+    }
+    const wh = db.warehouses.find(w => w.id === warehouse_id);
+    if (!wh) return res.status(404).json({ error: { code: 'WAREHOUSE_NOT_FOUND', message: 'Warehouse not found' } });
+    const tempDefaults: Record<string, { min: number; max: number }> = {
+      ambient: { min: 15, max: 30 },
+      chilled: { min: 0, max: 8 },
+      frozen: { min: -25, max: -18 },
+      hazmat: { min: 10, max: 25 },
+      quarantine: { min: 10, max: 25 }
+    };
+    const temps = tempDefaults[zone_type];
+    const zone: Zone = {
+      id: `Z-${Date.now()}`,
+      warehouse_id,
+      name,
+      type: zone_type as any,
+      min_temp_celsius: min_temp_celsius !== undefined ? min_temp_celsius : temps.min,
+      max_temp_celsius: max_temp_celsius !== undefined ? max_temp_celsius : temps.max,
+      is_active: true,
+      max_capacity_kg: max_capacity_kg || null
+    };
+    db.zones.push(zone);
+    await saveState();
+    res.status(201).json({ data: zone });
+  });
+
+  app.patch('/api/v1/zones/:id/deactivate', async (req, res) => {
+    const allowed = ['ops_manager', 'admin'];
+    if (!db.currentUser || !allowed.includes(db.currentUser.role)) {
+      return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Insufficient permissions' } });
+    }
+    const zone = db.zones.find(z => z.id === req.params.id);
+    if (!zone) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Zone not found' } });
+
+    const activeBins = db.bin_locations.filter(b => b.zone_id === zone.id && b.is_active);
+    if (activeBins.length > 0) {
+      return res.status(422).json({
+        error: { code: 'HAS_ACTIVE_BIN_LOCATIONS', message: `Cannot deactivate zone with ${activeBins.length} active bin location(s). Deactivate bin locations first.` }
+      });
+    }
+    const locIds = db.locations.filter(l => l.zone_id === zone.id).map(l => l.id);
+    const activeStock = db.stock_ledger
+      .filter(e => locIds.includes(e.location_id))
+      .reduce((sum, e) => sum + e.quantity, 0);
+    if (activeStock > 0) {
+      return res.status(422).json({
+        error: { code: 'ZONE_HAS_STOCK', message: 'Cannot deactivate zone with stock present. Transfer or write off stock first.' }
+      });
+    }
+    zone.is_active = false;
+    await saveState();
+    res.json({ data: zone });
+  });
+
+  app.patch('/api/v1/zones/:id/activate', async (req, res) => {
+    const allowed = ['ops_manager', 'admin'];
+    if (!db.currentUser || !allowed.includes(db.currentUser.role)) {
+      return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Insufficient permissions' } });
+    }
+    const zone = db.zones.find(z => z.id === req.params.id);
+    if (!zone) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Zone not found' } });
+    zone.is_active = true;
+    await saveState();
+    res.json({ data: zone });
+  });
+
+  // ---- Bin Locations CRUD & deactivation ----
+
+  app.get('/api/v1/bin-locations', (req, res) => {
+    let results = db.bin_locations;
+    if (req.query.warehouse_id) results = results.filter(b => b.warehouse_id === req.query.warehouse_id);
+    if (req.query.zone_id) results = results.filter(b => b.zone_id === req.query.zone_id);
+    if (req.query.location_type) results = results.filter(b => b.location_type === req.query.location_type);
+    if (req.query.is_active !== undefined) {
+      const active = req.query.is_active === 'true';
+      results = results.filter(b => b.is_active === active);
+    }
+    res.json({ data: results });
+  });
+
+  app.get('/api/v1/bin-locations/:id', (req, res) => {
+    const b = db.bin_locations.find(bl => bl.id === req.params.id);
+    if (!b) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Bin location not found' } });
+    res.json({ data: b });
+  });
+
+  app.post('/api/v1/bin-locations', async (req, res) => {
+    const allowed = ['ops_manager', 'admin'];
+    if (!db.currentUser || !allowed.includes(db.currentUser.role)) {
+      return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Insufficient permissions' } });
+    }
+    const { code, warehouse_id, zone_id, location_type, name, capacity_units, capacity_kg } = req.body;
+    if (!code || !warehouse_id || !zone_id || !location_type) {
+      return res.status(400).json({ error: { code: 'MISSING_FIELDS', message: 'code, warehouse_id, zone_id and location_type are required' } });
+    }
+    const validTypes = ['pick', 'bulk', 'receiving', 'dispatch', 'quarantine'];
+    if (!validTypes.includes(location_type)) {
+      return res.status(400).json({ error: { code: 'INVALID_LOCATION_TYPE', message: `location_type must be one of: ${validTypes.join(', ')}` } });
+    }
+    const zone = db.zones.find(z => z.id === zone_id);
+    if (!zone) return res.status(404).json({ error: { code: 'ZONE_NOT_FOUND', message: 'Zone not found' } });
+    if (zone.warehouse_id !== warehouse_id) {
+      return res.status(422).json({ error: { code: 'ZONE_WAREHOUSE_MISMATCH', message: 'zone_id does not belong to warehouse_id' } });
+    }
+    if (!zone.is_active) {
+      return res.status(422).json({ error: { code: 'ZONE_INACTIVE', message: 'Cannot create bin location in an inactive zone' } });
+    }
+    const duplicate = db.bin_locations.find(b => b.warehouse_id === warehouse_id && b.code === code);
+    if (duplicate) {
+      return res.status(409).json({ error: { code: 'CODE_EXISTS', message: 'A bin location with that code already exists in this warehouse' } });
+    }
+    const now = new Date().toISOString();
+    const bl: BinLocation = {
+      id: `BL-${Date.now()}`,
+      code,
+      name,
+      warehouse_id,
+      zone_id,
+      location_type,
+      capacity_units: capacity_units !== undefined ? capacity_units : undefined,
+      capacity_kg: capacity_kg !== undefined ? capacity_kg : undefined,
+      is_active: true,
+      created_at: now,
+      updated_at: now
+    };
+    db.bin_locations.push(bl);
+    await saveState();
+    res.status(201).json({ data: bl });
+  });
+
+  app.patch('/api/v1/bin-locations/:id', async (req, res) => {
+    const allowed = ['ops_manager', 'admin'];
+    if (!db.currentUser || !allowed.includes(db.currentUser.role)) {
+      return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Insufficient permissions' } });
+    }
+    const bl = db.bin_locations.find(b => b.id === req.params.id);
+    if (!bl) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Bin location not found' } });
+    const { name, code, capacity_units, capacity_kg, location_type } = req.body;
+    if (name !== undefined) bl.name = name;
+    if (code !== undefined) {
+      const dup = db.bin_locations.find(b => b.warehouse_id === bl.warehouse_id && b.code === code && b.id !== bl.id);
+      if (dup) return res.status(409).json({ error: { code: 'CODE_EXISTS', message: 'Code already in use in this warehouse' } });
+      bl.code = code;
+    }
+    if (capacity_units !== undefined) bl.capacity_units = capacity_units;
+    if (capacity_kg !== undefined) bl.capacity_kg = capacity_kg;
+    if (location_type !== undefined) {
+      const validTypes = ['pick', 'bulk', 'receiving', 'dispatch', 'quarantine'];
+      if (!validTypes.includes(location_type)) {
+        return res.status(400).json({ error: { code: 'INVALID_LOCATION_TYPE', message: `location_type must be one of: ${validTypes.join(', ')}` } });
+      }
+      bl.location_type = location_type;
+    }
+    bl.updated_at = new Date().toISOString();
+    await saveState();
+    res.json({ data: bl });
+  });
+
+  app.patch('/api/v1/bin-locations/:id/deactivate', async (req, res) => {
+    const allowed = ['ops_manager', 'admin'];
+    if (!db.currentUser || !allowed.includes(db.currentUser.role)) {
+      return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Insufficient permissions' } });
+    }
+    const bl = db.bin_locations.find(b => b.id === req.params.id);
+    if (!bl) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Bin location not found' } });
+    // Check stock assigned — look for stock ledger entries at matching location code
+    const locMatch = db.locations.find(l => l.code === bl.code && l.warehouse_id === bl.warehouse_id);
+    if (locMatch) {
+      const stock = db.stock_ledger
+        .filter(e => e.location_id === locMatch.id)
+        .reduce((sum, e) => sum + e.quantity, 0);
+      if (stock > 0) {
+        return res.status(422).json({
+          error: { code: 'BIN_HAS_STOCK', message: 'Cannot deactivate bin location with stock present.' }
+        });
+      }
+    }
+    bl.is_active = false;
+    bl.updated_at = new Date().toISOString();
+    await saveState();
+    res.json({ data: bl });
+  });
+
+  app.patch('/api/v1/bin-locations/:id/activate', async (req, res) => {
+    const allowed = ['ops_manager', 'admin'];
+    if (!db.currentUser || !allowed.includes(db.currentUser.role)) {
+      return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Insufficient permissions' } });
+    }
+    const bl = db.bin_locations.find(b => b.id === req.params.id);
+    if (!bl) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Bin location not found' } });
+    const zone = db.zones.find(z => z.id === bl.zone_id);
+    if (!zone || !zone.is_active) {
+      return res.status(422).json({ error: { code: 'ZONE_INACTIVE', message: 'Parent zone is inactive. Activate the zone first.' } });
+    }
+    bl.is_active = true;
+    bl.updated_at = new Date().toISOString();
+    await saveState();
+    res.json({ data: bl });
+  });
+
   // Dynamically calculate stock on hand by batch and location inside warehouse
   app.get('/api/v1/warehouses/:id/stock', (req, res) => {
     const whId = req.params.id;
@@ -3893,6 +4198,17 @@ async function startServer() {
           if (!checkZone.allowed) {
             return res.status(422).json({ error: { code: 'ZONE_MISMATCH', message: checkZone.details } });
           }
+          // Deactivation guards on putaway
+          if (putAwayZone && !putAwayZone.is_active) {
+            return res.status(422).json({ error: { code: 'ZONE_INACTIVE', message: `Zone '${putAwayZone.name}' is inactive. Choose an active zone.` } });
+          }
+          if (putAwayLocation && !putAwayLocation.is_active) {
+            return res.status(422).json({ error: { code: 'LOCATION_INACTIVE', message: `Location '${putAwayLocation.code}' is inactive. Choose an active location.` } });
+          }
+          const binLoc = db.bin_locations.find(b => b.code === putAwayLocation?.code && b.warehouse_id === putAwayLocation?.warehouse_id);
+          if (binLoc && !binLoc.is_active) {
+            return res.status(422).json({ error: { code: 'BIN_LOCATION_INACTIVE', message: `Bin location '${binLoc.code}' is inactive. Choose an active bin location.` } });
+          }
         }
 
         // 1. PRODUCT CLASS CHECK
@@ -4593,7 +4909,13 @@ async function startServer() {
           let unreservedBatchQty = Math.max(0, batch.quantity_available - reservations);
           if (unreservedBatchQty <= 0) continue;
 
-          const locationsWithStock = db.locations.filter(l => l.warehouse_id === order.fulfilment_warehouse_id);
+          const locationsWithStock = db.locations.filter(l => {
+            if (l.warehouse_id !== order.fulfilment_warehouse_id) return false;
+            if (l.is_active === false) return false;
+            const bl = db.bin_locations.find(b => b.code === l.code && b.warehouse_id === l.warehouse_id);
+            if (bl && !bl.is_active) return false;
+            return true;
+          });
           for (const loc of locationsWithStock) {
             if (qtyNeeded <= 0 || unreservedBatchQty <= 0) break;
 
@@ -7949,6 +8271,12 @@ async function startServer() {
     }
     if (!toWh || toWh.type !== 'fulfilment_point') {
       return res.status(422).json({ error: { code: 'INVALID_WAREHOUSE_TYPE', message: 'To warehouse must be a fulfilment_point' } });
+    }
+    if (!fromWh.is_active) {
+      return res.status(422).json({ error: { code: 'WAREHOUSE_INACTIVE', message: `Source warehouse '${fromWh.name}' is inactive.` } });
+    }
+    if (!toWh.is_active) {
+      return res.status(422).json({ error: { code: 'WAREHOUSE_INACTIVE', message: `Destination warehouse '${toWh.name}' is inactive.` } });
     }
 
     const driver = db.users.find(u => u.id === driver_id);
