@@ -28,6 +28,9 @@ import CustomerReturns from './components/CustomerReturns';
 import Catalogue from './components/Catalogue';
 import EODCheck from './components/EODCheck';
 import ZoneManagement from './components/ZoneManagement';
+import WarehouseManagement from './components/WarehouseManagement';
+import ZoneCRUD from './components/ZoneCRUD';
+import BinLocationManagement from './components/BinLocationManagement';
 import MarginReport from './components/MarginReport';
 import AuditLogs from './components/AuditLogs';
 import { subscribeToQueue } from './utils/offlineQueue';
@@ -609,6 +612,9 @@ export default function App() {
         { id: 'workflow_templates', label: 'Workflow Templates', icon: GitBranch, requiresAdmin: true },
         { id: 'pending_approvals', label: 'Pending Approvals', icon: UserCheck },
         { id: 'margin_report', label: 'Gross Margin Report', icon: TrendingUp, requiresManager: true },
+        { id: 'warehouse_mgmt', label: 'Warehouses', icon: Building2, requiresAdmin: true },
+        { id: 'zone_mgmt', label: 'Zone Setup', icon: Layers, requiresAdmin: true },
+        { id: 'bin_location_mgmt', label: 'Bin Locations Setup', icon: MapPin, requiresAdmin: true },
         { id: 'api_keys', label: 'API Keys', icon: Key, requiresAdmin: true },
         { id: 'webhooks', label: 'Webhooks', icon: Radio, requiresAdmin: true },
         { id: 'settings', label: 'Settings', icon: SettingsIcon, requiresAdmin: true }
@@ -639,6 +645,9 @@ export default function App() {
     workflow_templates: ['settings:manage'],
     pending_approvals: ['transfers:approve'],
     margin_report: ['margin_report:view'],
+    warehouse_mgmt: ['settings:manage'],
+    zone_mgmt: ['settings:manage'],
+    bin_location_mgmt: ['settings:manage'],
     api_keys: ['api_keys:manage'],
     webhooks: ['webhooks:manage'],
     settings: ['settings:manage']
@@ -1170,8 +1179,29 @@ export default function App() {
           )}
 
           {activeTab === 'zoning_rules' && (
-            <ZoneManagement 
-              currentUser={currentUser} 
+            <ZoneManagement
+              currentUser={currentUser}
+              triggerToast={triggerToast}
+            />
+          )}
+
+          {activeTab === 'warehouse_mgmt' && (
+            <WarehouseManagement
+              currentUser={currentUser}
+              triggerToast={triggerToast}
+            />
+          )}
+
+          {activeTab === 'zone_mgmt' && (
+            <ZoneCRUD
+              currentUser={currentUser}
+              triggerToast={triggerToast}
+            />
+          )}
+
+          {activeTab === 'bin_location_mgmt' && (
+            <BinLocationManagement
+              currentUser={currentUser}
               triggerToast={triggerToast}
             />
           )}
