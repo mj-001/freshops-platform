@@ -1,0 +1,16 @@
+FROM node:18-alpine
+
+# git is required for the Git push step
+RUN apk add --no-cache git
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+# Copy source (exporter + types only)
+COPY src/okf-exporter.ts ./src/
+COPY src/types.ts ./src/
+COPY tsconfig.json ./
+
+CMD ["npx", "tsx", "src/okf-exporter.ts"]

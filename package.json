@@ -9,7 +9,8 @@
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js state.json",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "okf:export": "tsx src/okf-exporter.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

@@ -1,0 +1,47 @@
+# Cloud Build config for the OKF digital-twin exporter.
+# Triggered by Cloud Scheduler on a defined cadence (e.g. nightly).
+#
+# Required substitutions (set in the Cloud Build trigger):
+#   _PROJECT_ID      - GCP project ID
+#   _REGION          - Cloud Run region (e.g. us-central1)
+#   _JOB_NAME        - Cloud Run Job name (e.g. freshops-okf-exporter)
+#   _IMAGE           - Full image name (e.g. gcr.io/$PROJECT_ID/freshops-okf-exporter)
+
+steps:
+  # 1. Build the OKF exporter image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - build
+      - -f
+      - Dockerfile.okf
+      - -t
+      - '$_IMAGE:$COMMIT_SHA'
+      - -t
+      - '$_IMAGE:latest'
+      - .
+
+  # 2. Push image to Artifact Registry / Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - push
+      - '--all-tags'
+      - '$_IMAGE'
+
+  # 3. Update the Cloud Run Job with the new image
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - run
+      - jobs
+      - update
+      - '$_JOB_NAME'
+      - '--image=$_IMAGE:$COMMIT_SHA'
+      - '--region=$_REGION'
+      - '--project=$_PROJECT_ID'
+
+images:
+  - '$_IMAGE:$COMMIT_SHA'
+  - '$_IMAGE:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

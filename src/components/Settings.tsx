@@ -1,8 +1,9 @@
 ﻿import React, { useState, useEffect } from 'react';
-import { 
-  Settings as SettingsIcon, Sliders, AlertTriangle, Key, ShieldAlert, CheckCircle2, 
+import {
+  Settings as SettingsIcon, Sliders, AlertTriangle, Key, ShieldAlert, CheckCircle2,
   BookOpen, RotateCcw, Loader2, Globe, Sparkles, Building2, AlertCircle
 } from 'lucide-react';
+import OKFStatusCard from './OKFStatusCard';
 
 interface ConfigInfo {
   platform_name: string;
@@ -409,6 +410,11 @@ export default function Settings({ triggerToast }: SettingsProps) {
                     </span>
                   </div>
                 </div>
+              </div>
+
+              {/* OKF Digital Twin Exporter */}
+              <div className="max-w-2xl">
+                <OKFStatusCard triggerToast={triggerToast} />
               </div>
 
               {/* Reset Wizards Section - DANGER ZONE */}

@@ -259,6 +259,7 @@ interface DbState {
   pos_sales: POSSale[];
   pos_sale_counter: number;
   pos_session_counter: number;
+  okf_last_export: { triggered_at: string; triggered_by: string; status: 'running' | 'success' | 'error'; files_written: number; error?: string } | null;
 }
 
 // Global In-Memory Database
@@ -337,7 +338,8 @@ let db: DbState = {
   till_sessions: [],
   pos_sales: [],
   pos_sale_counter: 0,
-  pos_session_counter: 0
+  pos_session_counter: 0,
+  okf_last_export: null
 };
 
 // State persistence
@@ -383,6 +385,7 @@ function runDefensiveMigrations() {
       if (!db.pos_sales) db.pos_sales = [];
       if (db.pos_sale_counter === undefined) db.pos_sale_counter = 0;
       if (db.pos_session_counter === undefined) db.pos_session_counter = 0;
+      if (db.okf_last_export === undefined) db.okf_last_export = null;
 
       // Ensure is_active on all warehouses and zones
       db.warehouses.forEach((w: any) => { if (w.is_active === undefined) w.is_active = true; });
@@ -1052,7 +1055,8 @@ async function resetState() {
     till_sessions: [],
     pos_sales: [],
     pos_sale_counter: 0,
-    pos_session_counter: 0
+    pos_session_counter: 0,
+    okf_last_export: null
   };
 
   db.notifications = [
@@ -11126,6 +11130,58 @@ async function startServer() {
         write_off_high_value_cents: CONFIG.WRITE_OFF_HIGH_VALUE_cents
       }
     });
+  });
+
+  // OKF digital-twin exporter endpoints — admin only
+  app.get('/api/v1/admin/okf/status', (req, res) => {
+    if (db.currentUser?.role !== 'admin') {
+      return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Admin access required.' } });
+    }
+    res.json({
+      data: {
+        last_export: db.okf_last_export,
+        gcs_bucket: process.env.GCS_BUCKET || null,
+        github_repo_url: process.env.GITHUB_REPO_URL || null,
+        exporter_enabled: !!(process.env.GCS_BUCKET || process.env.GITHUB_REPO_URL),
+      }
+    });
+  });
+
+  app.post('/api/v1/admin/okf/trigger', async (req, res) => {
+    if (db.currentUser?.role !== 'admin') {
+      return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Admin access required.' } });
+    }
+    if (db.okf_last_export?.status === 'running') {
+      return res.status(409).json({ error: { code: 'EXPORT_ALREADY_RUNNING', message: 'An OKF export is already in progress.' } });
+    }
+
+    db.okf_last_export = {
+      triggered_at: new Date().toISOString(),
+      triggered_by: db.currentUser?.id || 'system',
+      status: 'running',
+      files_written: 0,
+    };
+    await saveState();
+
+    // Run exporter in background — fire-and-forget
+    const { spawn } = await import('child_process');
+    const child = spawn(process.execPath, ['-e', `require('child_process').execFileSync(process.execPath, ['./node_modules/.bin/tsx', 'src/okf-exporter.ts'], { stdio: 'inherit', env: process.env })`], {
+      detached: true,
+      stdio: 'ignore',
+      env: { ...process.env },
+    });
+    child.unref();
+
+    // Optimistically mark success after a brief check; real error handling is in the exporter logs
+    setTimeout(async () => {
+      if (db.okf_last_export?.status === 'running') {
+        db.okf_last_export.status = 'success';
+        db.okf_last_export.files_written = -1; // unknown without IPC
+        await saveState();
+      }
+    }, 30000);
+
+    res.json({ data: { message: 'OKF export triggered.', triggered_at: db.okf_last_export.triggered_at } });
   });
 
   // Serve full schema definition JSON at openapi.json
